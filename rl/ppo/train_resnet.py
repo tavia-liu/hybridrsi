@@ -45,11 +45,13 @@ def parse(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--task", default="P4")
-    ap.add_argument("--family", default="near", help="start family of the training bank (near = part held above its fixture)")
+    ap.add_argument("--family", default="near_up",
+                    help="start family of the training bank (near_up = part upright above its fixture, hand straight down; near = AlphaNIST near-mating with tilts and side grasps)")
     ap.add_argument("--bank-size", type=int, default=640, help="start states in the bank")
     ap.add_argument("--bank-seed", type=int, default=api.TRAIN_SEEDS.start, help="seed of the bank (training seeds only)")
     ap.add_argument("--envs", type=int, default=128)
     ap.add_argument("--iters", type=int, default=30000)
+    ap.add_argument("--episode-steps", type=int, default=150, help="training episode cap in 25 Hz control steps (benchmark: 375 = 15 s)")
     # PPO
     ap.add_argument("--steps", type=int, default=32, help="rollout steps per environment and iteration")
     ap.add_argument("--epochs", type=int, default=5)
@@ -140,7 +142,8 @@ class Trainer:
         self.lr, self.it, self.transitions = a.lr, 0, 0
         self._wrap_groups()
         self.aug = RandomShift(a.aug_pad).to(self.dev) if a.aug_pad > 0 else None
-        self.ecfg = EnvConfig(nthread=a.nthread, cost_coef=a.cost_coef, action_scale_joints=parse_scales(a.action_scale_joints))
+        self.ecfg = EnvConfig(nthread=a.nthread, cost_coef=a.cost_coef, horizon_s=a.episode_steps * 0.04,
+                              action_scale_joints=parse_scales(a.action_scale_joints))
         self.args = dict(vars(a), env={k: v for k, v in dataclasses.asdict(self.ecfg).items() if k != "nthread"})
         self.args["derived"] = dict(rollout_transitions=a.envs * a.steps, minibatch_size=a.envs * a.steps // a.minibatches,
                                     updates_per_iteration=a.epochs * a.minibatches,
