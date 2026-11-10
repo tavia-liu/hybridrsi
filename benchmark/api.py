@@ -1,7 +1,7 @@
 """The policy-facing API of the benchmark: one episode of one NIST task-board assembly.
 
 The simulator accepts 8-D relative joint increments at 25 Hz (q_target = q + scale*a, a[7] latches the gripper).
-AssemblyAPI wraps that with what a real cell offers a policy: the robot's state, three RGB-D cameras, a
+AssemblyAPI wraps that with what a real cell offers a policy: the robot's state, two RGB-D cameras, a
 one-sentence instruction in natural language and task-agnostic kinematics (IK, servo to a pose, gripper). Nothing
 else: no part pose, no goal pose, no part mask, no CAD model, no pose estimator. In the images the part to assemble
 is orange and its fixture blue; everything else is grey. The simulator's part pose and assembly distance are never
@@ -81,7 +81,7 @@ class AssemblyAPI:
         self._views_cache = None
 
     def _views(self):
-        """The three camera views at this control step (rendered once per step)."""
+        """The camera views at this control step (rendered once per step)."""
         if self._views_cache is None or self._views_cache[0] != int(self.env.t[0]):
             self._views_cache = (int(self.env.t[0]), self._cams.capture(self.env.state[0]))
         return self._views_cache[1]
@@ -142,12 +142,13 @@ class AssemblyAPI:
         )
 
     def camera(self):
-        """The RGB-D cameras at this control step: dict(global=..., global2=..., wrist=...), each dict(rgb [H,W,3]
+        """The two RGB-D cameras at this control step: dict(agentview=..., eye_in_hand=...), each dict(rgb [H,W,3]
         uint8, depth [H,W] metres along the optical axis, K 3x3 intrinsics, cam_pos [3], cam_R [3,3]
         camera-to-world). The part to assemble is orange, its fixture blue, everything else grey. No segmentation,
-        no poses: where the part and the fixture are must be read off the images. `global` and `global2` are fixed over the board (front-right and front-left), `wrist` rides on the
-        hand looking along the fingers. A pixel (u,v) with depth d is at
-        cam_pos + cam_R @ [(u+.5-cx)/fx*d, -(v+.5-cy)/fy*d, -d] in the world. Resolution {RES}; no sensor noise."""
+        no poses: where the part and the fixture are must be read off the images. `agentview` is fixed in front
+        of the board, opposite the robot, looking down at it; `eye_in_hand` rides on the hand looking along the
+        fingers. A pixel (u,v) with depth d is at cam_pos + cam_R @ [(u+.5-cx)/fx*d, -(v+.5-cy)/fy*d, -d] in the
+        world. Resolution {RES}; no sensor noise."""
         return {n: dict(v) for n, v in self._views().items()}
 
     def _external_load(self, J):
@@ -278,8 +279,8 @@ def spec():
         fn = getattr(AssemblyAPI, name)
         doc = " ".join((fn.__doc__ or "").split())
         if name == "camera":
-            from perception import W, H, WW, WH
-            doc = doc.replace("{RES}", f"global/global2 {W}x{H}, wrist {WW}x{WH}")
+            from perception import W, H
+            doc = doc.replace("{RES}", f"{W}x{H} for both")
         sig = str(inspect.signature(fn)).replace("(self, ", "(").replace("(self)", "()").split(" -> ")[0]
         lines.append(f"  api.{name}{sig}\n      {doc}")
     lines += ["", "There is no insert/align/reorient/screw primitive; the assembly strategy is yours to compute. The task is "

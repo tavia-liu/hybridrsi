@@ -7,7 +7,7 @@ MuJoCo simulation of the NIST Assembly Task Board 1 (20 parts, Franka Panda), bu
 | --- | --- |
 | one sentence: `api.instruction()`, e.g. *Pick up the orange rod and insert it all the way into the hole of the blue fixture.* | the part's pose or its goal pose |
 | robot state (joints, TCP pose, gripper width, external joint torques / TCP wrench, Jacobian) | the part's segmentation mask |
-| three RGB-D cameras (two fixed over the board, one on the wrist) with intrinsics and camera poses | the part's CAD model or size |
+| two RGB-D cameras, the robosuite pair (`agentview` fixed in front of the board, `eye_in_hand` on the wrist), 640x480, with intrinsics and camera poses | the part's CAD model or size |
 | joint-space control at 25 Hz, IK, servo-to-pose, gripper | any pose estimator or tracker |
 
 In the images the part to assemble is orange and its fixture blue; every other part and fixture is grey. That colour

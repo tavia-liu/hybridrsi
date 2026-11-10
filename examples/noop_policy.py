@@ -11,8 +11,8 @@ api.EpisodeOver is raised when the episode ends (success, safety stop or the tim
 
 def policy(api):
     print(api.instruction())                      # e.g. "Pick up the orange rod and insert it ... blue fixture."
-    views = api.camera()                          # global / global2 / wrist: rgb, depth, K, cam_pos, cam_R
+    views = api.camera()                          # agentview / eye_in_hand: rgb, depth, K, cam_pos, cam_R
     obs = api.observe()                           # tcp pose, joints, gripper, external wrench
-    assert views["global"]["rgb"].shape[2] == 3 and obs["tcp_pos"].shape == (3,)
+    assert views["agentview"]["rgb"].shape[2] == 3 and obs["tcp_pos"].shape == (3,)
     api.wait(1.0)
     api.wait(60.0)                                # raises api.EpisodeOver at the time limit

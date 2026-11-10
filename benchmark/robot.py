@@ -1,4 +1,4 @@
-"""The robot cell: a Franka arm, two fixed RGB-D cameras and a wrist camera in front of the NIST task board.
+"""The robot cell: a Franka arm with a wrist RGB-D camera and one fixed RGB-D camera in front of the NIST task board.
 The policy sees robot state and images only: no part pose, no mask, no CAD model.
 
     import robot

@@ -12,6 +12,6 @@ b = server.Board(seed=0, tasks=resolve_tasks(PRESETS["board5"]), steps_per_part=
 for part in b.tasks[:2]:
     b.select(part)
     print(part, b.api.instruction())
-    v = b.api.camera()["global"]
+    v = b.api.camera()["agentview"]
     Image.fromarray(v["rgb"]).save(out / f"board_{part}.png")
 print("BOARD SMOKE OK")
