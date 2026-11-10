@@ -1,0 +1,61 @@
+defaults:
+  - _self_
+
+# environment (rl/near_env.py)
+task: P4
+family: near            # training start distribution; the benchmark itself only has the loose-on-the-board start
+episode_steps: 375      # 15 s of control steps per training episode (the benchmark budget, 6000, applies at evaluation)
+ee_step_m: 0.0025       # max TCP translation per control step (m)
+ee_step_rad: 0.0436     # max TCP rotation per control step (rad, 2.5 deg)
+gripper_action: true    # action[6] drives the gripper (> 0.5 open, < -0.5 close, else keep)
+safety_penalty: 0.0     # reward at a safety stop is -safety_penalty (0 = plain binary success reward)
+
+# DrQ-v2 defaults (cfgs/config.yaml of facebookresearch/drqv2)
+frame_stack: 3
+action_repeat: 2
+discount: 0.99
+num_train_frames: 2000000
+num_seed_frames: 4000
+eval_every_frames: 20000
+num_eval_episodes: 20
+save_snapshot: true
+replay_buffer_size: 300000
+replay_buffer_num_workers: 4
+nstep: 3
+batch_size: 256
+seed: 1
+device: cuda
+use_tb: true
+lr: 1e-4
+feature_dim: 50
+stddev_schedule: linear(1.0,0.1,500000)
+
+# bookkeeping
+buffer_dir: null        # replay episodes on disk; put it on the node's local disk (the sbatch does)
+run_dir: runs/drqv2/${task}_${family}_s${seed}
+log_every_updates: 200
+wandb:
+  project: hybridrsi
+  mode: online
+  id: null
+
+agent:
+  _target_: drqv2.DrQV2Agent
+  obs_shape: ???
+  action_shape: ???
+  device: ${device}
+  lr: ${lr}
+  critic_target_tau: 0.01
+  update_every_steps: 2
+  use_tb: ${use_tb}
+  num_expl_steps: 2000
+  hidden_dim: 1024
+  feature_dim: ${feature_dim}
+  stddev_schedule: ${stddev_schedule}
+  stddev_clip: 0.3
+
+hydra:
+  run:
+    dir: ${run_dir}
+  job:
+    chdir: true
