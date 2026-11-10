@@ -157,8 +157,7 @@ class Workspace:
             path = self.work_dir / "eval_videos" / f"{self.global_frame}.mp4"
             path.parent.mkdir(exist_ok=True)
             frames = [np.ascontiguousarray(f.transpose(1, 2, 0)) for f in video[::2]]       # newest eye_in_hand frame
-            imageio.mimwrite(path, frames, fps=6, codec="libx264", quality=6, macro_block_size=4)
-            payload["eval/eye_in_hand"] = wandb.Video(str(path), fps=6, format="mp4")
+            imageio.mimwrite(path, frames, fps=6, codec="libx264", quality=6, macro_block_size=4)   # local only (user)
         wandb.log(payload, step=self.global_frame)
         print(f"[eval] frame {self.global_frame}: success {successes}/{n}  safety {safeties}/{n}", flush=True)
 
