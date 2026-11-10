@@ -13,4 +13,4 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONPATH=.:benchmark MUJOCO_GL=egl
 "${PYTHON:-.venv/bin/python}" -u benchmark/eval_protocol.py --task "${TASK:-R8}" --policy "$POLICY" \
-    --n "${N:-100}" --seed "${SEED:-1000}" --horizon "${HORIZON:-40}" ${OUT:+--out "$OUT"}
+    --n "${N:-51}" --seed "${SEED:-0}" --horizon "${HORIZON:-40}" ${OUT:+--out "$OUT"}

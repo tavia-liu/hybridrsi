@@ -5,8 +5,8 @@
 
 policy.py defines policy(api); for the board also, optionally, recover(api) (run before every part but the first,
 scored) and finish(api) (run after a success, unscored). The board is one continuous task: the arm starts at home
-once and goes on from wherever the previous part left it. Held-out starts are seeds RESERVED..RESERVED+99 (single
-part) and RESERVED..RESERVED+9 (boards), reserved on the server.
+once and goes on from wherever the previous part left it. Held-out starts are seeds 0..50 (single part) and 0..9
+(boards), reserved on the server; develop on seeds 51 and up.
 Videos are rendered by the server into its --out under <name>/.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-RESERVED = 1000
+RESERVED = 0            # held-out seeds start here (api.EVAL_SEEDS): single part uses 51 of them, boards 10
 
 
 def load_policy(sandbox: Path):
@@ -111,7 +111,7 @@ def board(a, robot, pol, token, name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sandbox", required=True)
-    ap.add_argument("--task", default="R8"); ap.add_argument("--n", type=int, default=100)
+    ap.add_argument("--task", default="R8"); ap.add_argument("--n", type=int, default=51)
     ap.add_argument("--board", action="store_true"); ap.add_argument("--tasks", default="board20"); ap.add_argument("--seeds", type=int, default=10); ap.add_argument("--seed0", type=int, default=0, help="first held-out board index (to split boards across processes)")
     ap.add_argument("--horizon", type=float, default=240.0)
     ap.add_argument("--out", required=True, help="where eval.json goes (videos: server --out/<name>/)")

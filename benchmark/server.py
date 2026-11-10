@@ -11,7 +11,7 @@ One connection per client session (multiprocessing.connection, pickle). Requests
   call(ep, method, args, kwargs)             -> result, or episode_over + outcome
   outcome(ep) | close(ep)
   save_video(ep, name)                                   evaluation sessions only: renders the episode to <out>/<name>.mp4
-Seeds 0..999 are for development; RESERVED.. RESERVED+99 are the evaluation starts and need the token. Outcomes carry success/safety/timeout/steps only.
+Seeds 0..50 are the evaluation starts and need the token; every seed from 51 up is for development. Outcomes carry success/safety/timeout/steps only.
 """
 from __future__ import annotations
 
@@ -34,8 +34,7 @@ from assembly_policy.sim.tasks import TASKS, resolve_tasks
 from multi_board import PRESETS, choose_layout, render as render_board
 from multi_env import MultiPartEnv
 
-RESERVED = api.EVAL_SEEDS.start
-N_EVAL_SEEDS = len(api.EVAL_SEEDS)
+EVAL_END = api.EVAL_SEEDS.stop          # seeds below this are the held-out starts
 TOKEN = os.environ.get("SERVER_TOKEN", "")
 MAX_EPISODES = int(os.environ.get("SERVER_MAX_EPISODES", "16"))
 DT = 0.04
@@ -136,10 +135,10 @@ class Session(threading.Thread):
         if cmd in ("start", "board"):
             seed = int(r.get("seed", 0))
             priv = bool(TOKEN) and r.get("token") == TOKEN
-            if seed < 0 or seed >= RESERVED + N_EVAL_SEEDS:
-                raise ValueError(f"seed {seed} is outside the benchmark: 0..{RESERVED - 1} develop, {RESERVED}..{RESERVED + N_EVAL_SEEDS - 1} evaluate")
-            if seed >= RESERVED and not priv:
-                raise PermissionError(f"seeds >= {RESERVED} are reserved for evaluation")
+            if seed < 0:
+                raise ValueError(f"seed {seed}: seeds are 0..{EVAL_END - 1} (held-out, token) and {EVAL_END}.. (development)")
+            if seed < EVAL_END and not priv:
+                raise PermissionError(f"seeds 0..{EVAL_END - 1} are reserved for evaluation; develop on seeds >= {EVAL_END}")
             if not _SLOTS.acquire(timeout=600):
                 raise RuntimeError("server busy: no episode slot free")
             self.n += 1

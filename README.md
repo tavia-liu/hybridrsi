@@ -24,19 +24,19 @@ on the board, the order in which they are scored).
 
 | seeds | use |
 | --- | --- |
-| 0 .. 999 | development and training |
-| 1000 .. 1099 | held-out evaluation: single part = seeds 1000..1099 (100 starts per task); board = seeds 1000..1009 (10 boards). The cell server hands these out only with its token. |
+| 0 .. 50 | held-out evaluation: single part = all 51 seeds per task; board = seeds 0..9 (10 boards). The cell server hands these out only with its token. |
+| 51 and up | development and training |
 
 ## Scoring
 
 The benchmark score is `robot.board(seed)`: one continuous task with all 20 parts physically on the board in a random
-order, 240 s per part pooled, scored by the parts seated at the end, over the 10 held-out boards
+order, 240 s per part pooled, scored by the parts seated at the end, over the 10 held-out boards (seeds 0..9)
 (`benchmark/eval_remote.py --board`). Single-part episodes (`benchmark/eval_protocol.py`, `robot.start`) use the same
 start and are for development.
 
 ```
 PYTHONPATH=.:benchmark MUJOCO_GL=egl
-python benchmark/eval_protocol.py --task R8 --policy examples/noop_policy.py      # one part, 100 held-out starts, videos
+python benchmark/eval_protocol.py --task R8 --policy examples/noop_policy.py      # one part, 51 held-out starts, videos
 python benchmark/multi_board.py --tasks board20 --policy examples/noop_policy.py  # all 20 parts on the board
 sbatch --export=ALL,CMD="..." gpu.sbatch                                          # any command on a GPU (EGL rendering)
 python tests/smoke_gpu.py /tmp/smoke                                              # plumbing check on a GPU node

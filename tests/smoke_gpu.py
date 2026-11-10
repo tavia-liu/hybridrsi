@@ -42,7 +42,7 @@ assert a.trace and "part" not in a.trace[-1]
 import eval_protocol  # noqa: E402
 pol = eval_protocol.load_policy(Path("examples/noop_policy.py"))
 env2 = api.make_env("R8", horizon_s=3.0)
-summary, rows = eval_protocol.evaluate(env2, pol, "R8", n=1, seed=1000, record=True,
+summary, rows = eval_protocol.evaluate(env2, pol, "R8", n=1, seed=0, record=True,
                                        on_episode=lambda k, r: eval_protocol.Video("R8").write(r, out / "e000.mp4"), verbose=False)
 print("eval:", json.dumps(summary)[:300])
 assert (out / "e000.mp4").exists()

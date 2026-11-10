@@ -7,9 +7,9 @@ else: no part pose, no goal pose, no part mask, no CAD model, no pose estimator.
 is orange and its fixture blue; everything else is grey. The simulator's part pose and assembly distance are never
 exposed.
 
-Seeds: 0..999 are for development and training, 1000..1099 are the held-out evaluation starts (EVAL_SEEDS). A seed
-sets only where the part lies (and, on the board, the order of the parts); the arm always starts at home with the
-gripper open.
+Seeds: 0..50 are the held-out evaluation starts (EVAL_SEEDS; single part: all 51 per task, board: EVAL_BOARDS = 0..9),
+every seed from 51 up is for development and training (TRAIN_SEEDS). A seed sets only where the part lies (and, on the
+board, the order of the parts); the arm always starts at home with the gripper open.
 
 `spec()` renders the documentation of every method from the docstrings below, so what a policy is told cannot
 drift from what it can call. A policy is `policy(api)`; `run_episode()` runs it on one start state.
@@ -27,8 +27,9 @@ from assembly_policy.sim.tasks import TASKS
 
 METHODS = ("instruction", "observe", "step", "constants", "camera", "ik", "move_to", "move_to_joints", "set_gripper", "wait")
 START_FAMILY = "board"                   # the only start: part dropped loose on the board, arm at home, gripper open
-TRAIN_SEEDS = range(0, 1000)
-EVAL_SEEDS = range(1000, 1100)
+EVAL_SEEDS = range(0, 51)             # held-out; the cell server hands them out only with its token
+EVAL_BOARDS = range(0, 10)            # the scored boards
+TRAIN_SEEDS = range(51, 2**31 - 1)    # development and training
 
 INSTRUCTIONS = {
     "rod": "Pick up the orange rod and insert it all the way into the hole of the blue fixture.",

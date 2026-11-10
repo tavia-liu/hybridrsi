@@ -8,7 +8,7 @@ from assembly_policy.sim.tasks import resolve_tasks
 from multi_board import PRESETS
 
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
-b = server.Board(seed=1000, tasks=resolve_tasks(PRESETS["board5"]), per_part_s=10.0, record=False)
+b = server.Board(seed=0, tasks=resolve_tasks(PRESETS["board5"]), per_part_s=10.0, record=False)
 for part in b.tasks[:2]:
     b.select(part)
     print(part, b.api.instruction())

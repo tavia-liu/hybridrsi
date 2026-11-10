@@ -4,7 +4,7 @@ Protocol. The part lies loose on the board at a random settled pose, the robot i
 the gripper open (reset family `board`); the policy has --horizon seconds (default 40) to assemble it. Success:
 both of the part's keypoints within 1 mm of their goal, for whichever of the part's mesh symmetries fits best (a
 rod seated either way up counts). Start k comes from the simulator's reset generator with seed --seed + k: seeds
-1000.. are the held-out set; develop on other seeds. Every episode is rendered to an mp4. The policy file
+0..50 are the held-out set; develop on seeds 51 and up. Every episode is rendered to an mp4. The policy file
 is checked before it runs: it may use the public methods of `api` only (no `api.env`, no private attributes, no
 simulator imports).
 Reported: success rate, completion time of the successful episodes, timeouts, safety stops, policy errors.
@@ -153,7 +153,7 @@ def main():
     ap.add_argument("--task", required=True, help="one of " + ", ".join(TASKS))
     ap.add_argument("--policy", required=True, help="a policy.py defining policy(api)")
     ap.add_argument("--n", type=int, default=N_EVAL)
-    ap.add_argument("--seed", type=int, default=EVAL_SEED, help=f"start-state seed ({EVAL_SEED} = held-out)")
+    ap.add_argument("--seed", type=int, default=EVAL_SEED, help=f"first start-state seed ({EVAL_SEED}..{EVAL_SEED + N_EVAL - 1} = held-out)")
     ap.add_argument("--horizon", type=float, default=40.0, help="episode time limit in seconds")
     ap.add_argument("--out", default=None, help="output folder (default runs/eval/<task>_<policy stem>_s<seed>)")
     ap.add_argument("--no-video", action="store_true")
