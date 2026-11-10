@@ -264,7 +264,7 @@ class AssemblyAPI:
         if bool(done[0]):
             self.done = True
             self.outcome = dict(success=bool(info["success"][0]), safety=bool(info["safety"][0]),
-                                timeout=bool(info["timeout"][0]), d_asm=float(info["d_asm"][0]),
+                                timeout=bool(info["timeout"][0]),
                                 steps=int(self.env.t[0]))
             raise EpisodeOver()
         return self.observe()

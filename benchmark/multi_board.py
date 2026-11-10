@@ -185,7 +185,6 @@ def run_seed(seed, tasks, policy_mod, a, out, sp_single):
                 print(f"seed {seed} part {i + 1} {t}: safety stop after {(int(env.t[0]) - t0) * dt:.1f} s, retry {tries}", flush=True)
                 continue
             break
-        d_mm = round(float(env.assembly_distance(t)[0]) * 1000, 2)
         if out_["success"] and hasattr(policy_mod, "finish") and not out_.get("timeout"):
             env.scoring = False                       # the part is seated: press, release, lift (no re-trigger)
             ap2 = api.AssemblyAPI(env, rng, record=True)
@@ -200,23 +199,22 @@ def run_seed(seed, tasks, policy_mod, a, out, sp_single):
             if ap2.done and ap2.outcome.get("timeout"):
                 out_["timeout"] = True
         secs = round((int(env.t[0]) - t0) * dt, 2)
-        after = {u: round(float(env.assembly_distance(u)[0]) * 1000, 2) for u in tasks}
+        after = {u: bool(v["ok"]) for u, v in env.assembled().items()}       # seated after this stage (release included)
         results.append(dict(stage=i, task=t, success=bool(out_["success"]), safety=bool(out_.get("safety", False)),
-                            tries=tries, seconds=secs, d_asm_mm=d_mm, d_asm_after_release_mm=after[t],
-                            after_stage_mm=after, error=err))
+                            tries=tries, seconds=secs, seated_after_release=after[t], after_stage_seated=after, error=err))
         stages.append((len(frames) - 1, f"{NAMES.get(t, t)}: {'assembled in %.1f s' % secs if out_['success'] else 'not assembled (%.0f s)' % secs}",
                        bool(out_["success"])))
         knocked = [s_["task"] for s_ in results[:-1]        # seated after its own stage, displaced during this one
-                   if s_["after_stage_mm"][s_["task"]] < 1.0 and after[s_["task"]] >= 1.0]
+                   if s_["after_stage_seated"][s_["task"]] and not after[s_["task"]]]
         print(f"seed {seed} part {i + 1}/{len(tasks)} {t}: {'assembled' if out_['success'] else 'NOT assembled'} "
-              f"in {secs:.1f} s  d_asm {d_mm} -> {after[t]} mm after release"
+              f"in {secs:.1f} s  {'still seated' if after[t] else 'not seated'} after release"
               f"{'  knocked out: ' + ','.join(knocked) if knocked else ''}{'  ' + err if err else ''}", flush=True)
         if out_.get("timeout"):
             timed_out = True
             break
     final = env.assembled()
     res = dict(seed=seed, tasks=tasks, order=[r["task"] for r in results], stages=results,
-               final={t: dict(ok=v["ok"], d_asm_mm=round(v["d_asm"] * 1000, 2)) for t, v in final.items()},
+               final={t: dict(ok=bool(v["ok"])) for t, v in final.items()},
                n_seated=sum(v["ok"] for v in final.values()), n=len(tasks),
                all_seated=all(v["ok"] for v in final.values()), timed_out=timed_out,
                total_s=round(int(env.t[0]) * dt, 2), wall_s=round(time.time() - t_wall, 1))

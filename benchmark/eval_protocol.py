@@ -118,8 +118,7 @@ def evaluate(env, policy, task, n=N_EVAL, seed=EVAL_SEED, record=True, on_episod
             on_episode(k, r)
         rows.append(dict(trial=k, success=bool(r["success"]), safety=bool(r.get("safety", False)),
                          timeout=bool(r.get("timeout", False)), steps=int(r.get("steps", 0)),
-                         time_s=round(int(r.get("steps", 0)) * DT, 2), error=r.get("error"),
-                         d_asm_mm=round(float(r.get("d_asm", float("nan"))) * 1000, 2)))
+                         time_s=round(int(r.get("steps", 0)) * DT, 2), error=r.get("error")))
         if verbose and (k + 1) % 10 == 0:
             print(f"[eval] {k + 1}/{len(S)}: {sum(x['success'] for x in rows)} ok  ({time.time() - t0:.0f}s)", flush=True)
     ok = [x for x in rows if x["success"]]
