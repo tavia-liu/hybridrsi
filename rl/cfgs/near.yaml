@@ -8,6 +8,7 @@ episode_steps: 375      # 15 s of control steps per training episode (the benchm
 ee_step_m: 0.0025       # max TCP translation per control step (m)
 ee_step_rad: 0.0436     # max TCP rotation per control step (rad, 2.5 deg)
 gripper_action: true    # action[6] drives the gripper (> 0.5 open, < -0.5 close, else keep)
+proprio: true           # actor/critic also see the robot state (tcp pose, gripper width, joints, wrench); false = pixels only
 safety_penalty: 0.0     # reward at a safety stop is -safety_penalty (0 = plain binary success reward)
 
 # DrQ-v2 defaults (cfgs/config.yaml of facebookresearch/drqv2)

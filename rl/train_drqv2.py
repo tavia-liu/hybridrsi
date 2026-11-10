@@ -46,9 +46,12 @@ def _worker_init_fn(worker_id):
 replay_buffer._worker_init_fn = _worker_init_fn
 
 
-def make_agent(obs_spec, action_spec, cfg):
+def make_agent(obs_spec, state_spec, action_spec, cfg, proprio):
     cfg.obs_shape = obs_spec.shape
     cfg.action_shape = action_spec.shape
+    if proprio:
+        cfg._target_ = "drqv2_proprio.DrQV2ProprioAgent"
+        cfg.state_shape = state_spec.shape
     return hydra.utils.instantiate(cfg)
 
 
@@ -60,7 +63,8 @@ class Workspace:
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
         self.setup()
-        self.agent = make_agent(self.train_env.observation_spec(), self.train_env.action_spec(), self.cfg.agent)
+        self.agent = make_agent(self.train_env.observation_spec(), self.train_env.state_spec(), self.train_env.action_spec(),
+                                self.cfg.agent, self.cfg.proprio)
         self.timer = utils.Timer()
         self._global_step = 0
         self._global_episode = 0
@@ -71,22 +75,35 @@ class Workspace:
         self.logger = Logger(self.work_dir, use_tb=cfg.use_tb)
         self.train_env = near_env.make(cfg, cfg.seed)
         self.eval_env = near_env.make(cfg, cfg.seed + 1000)
-        data_specs = (self.train_env.observation_spec(), self.train_env.action_spec(),
-                      specs.Array((1,), np.float32, "reward"), specs.Array((1,), np.float32, "discount"))
+        data_specs = (self.train_env.observation_spec(),) + ((self.train_env.state_spec(),) if cfg.proprio else ()) + (
+            self.train_env.action_spec(), specs.Array((1,), np.float32, "reward"), specs.Array((1,), np.float32, "discount"))
         buffer_dir = Path(cfg.buffer_dir) if cfg.buffer_dir else self.work_dir / "buffer"
         buffer_dir.parent.mkdir(parents=True, exist_ok=True)
         self.replay_storage = ReplayBufferStorage(data_specs, buffer_dir)
-        self.replay_loader = make_replay_loader(buffer_dir, cfg.replay_buffer_size, cfg.batch_size,
-                                                cfg.replay_buffer_num_workers, cfg.save_snapshot, cfg.nstep, cfg.discount)
+        if cfg.proprio:
+            import drqv2_proprio
+            self.replay_loader = drqv2_proprio.make_replay_loader(buffer_dir, cfg.replay_buffer_size, cfg.batch_size,
+                                                                  cfg.replay_buffer_num_workers, cfg.save_snapshot, cfg.nstep,
+                                                                  cfg.discount, _worker_init_fn)
+        else:
+            self.replay_loader = make_replay_loader(buffer_dir, cfg.replay_buffer_size, cfg.batch_size,
+                                                    cfg.replay_buffer_num_workers, cfg.save_snapshot, cfg.nstep, cfg.discount)
         self._replay_iter = None
         try:
             from assembly_policy.sim.tasks import task_name
             group = task_name(cfg.task)
         except Exception:
             group = cfg.task
-        wandb.init(project=cfg.wandb.project, group=f"{group}_{cfg.family}", name=f"drqv2_{group}_{cfg.family}_s{cfg.seed}",
-                   tags=["drqv2", "pixel", cfg.family, cfg.task], config=OmegaConf.to_container(cfg, resolve=True),
+        name = f"drqv2{'' if cfg.proprio else '_pixelonly'}_{group}_{cfg.family}_s{cfg.seed}"
+        wandb.init(project=cfg.wandb.project, group=f"{group}_{cfg.family}", name=name,
+                   tags=["drqv2", "pixel+proprio" if cfg.proprio else "pixel", cfg.family, cfg.task],
+                   config=OmegaConf.to_container(cfg, resolve=True),
                    dir=str(self.work_dir), mode=cfg.wandb.mode, resume="allow", id=cfg.wandb.id or None)
+
+    def _act(self, time_step, eval_mode):
+        if self.cfg.proprio:
+            return self.agent.act(time_step.observation, time_step.state, self.global_step, eval_mode=eval_mode)
+        return self.agent.act(time_step.observation, self.global_step, eval_mode=eval_mode)
 
     @property
     def global_step(self):
@@ -113,7 +130,7 @@ class Workspace:
             time_step = self.eval_env.reset()
             while not time_step.last():
                 with torch.no_grad(), utils.eval_mode(self.agent):
-                    action = self.agent.act(time_step.observation, self.global_step, eval_mode=True)
+                    action = self._act(time_step, eval_mode=True)
                 time_step = self.eval_env.step(action)
                 if episode == 0:
                     video.append(time_step.observation[-3:])            # newest eye_in_hand frame (C,H,W)
@@ -184,7 +201,7 @@ class Workspace:
                 self.logger.log("eval_total_time", self.timer.total_time(), self.global_frame)
                 self.eval()
             with torch.no_grad(), utils.eval_mode(self.agent):
-                action = self.agent.act(time_step.observation, self.global_step, eval_mode=False)
+                action = self._act(time_step, eval_mode=False)
             if not seed_until_step(self.global_step):
                 metrics = self.agent.update(self.replay_iter, self.global_step)
                 self.logger.log_metrics(metrics, self.global_frame, ty="train")

@@ -1,7 +1,8 @@
 """The HybridRSI cell as a dm_env for DrQ-v2 (training only; the benchmark API underneath is untouched).
 
 Observation: the two cameras (agentview, eye_in_hand), 84x84 RGB each, concatenated along channels -> (84, 84, 6)
-uint8 under the key "pixels" (DrQ-v2's FrameStackWrapper stacks 3 of them -> 18 x 84 x 84). Nothing else.
+uint8 under the key "pixels" (DrQ-v2's FrameStackWrapper stacks 3 of them -> 18 x 84 x 84), and "state", the robot's
+own report (TCP position and quaternion, gripper width, joints, wrist wrench / 20) -> 21 floats. Nothing about the part.
 Action: 7 numbers in [-1, 1]: TCP translation (x, y, z, up to ee_step_m per control step), TCP rotation (rotation
 vector, up to ee_step_rad per control step) and the gripper (> 0.5 open, < -0.5 close, else keep, as api.step's
 action[7]). Each action is held for `repeat` 25 Hz control steps (12.5 Hz decisions for repeat=2); the cameras are
@@ -32,6 +33,13 @@ import api  # noqa: E402
 from assembly_policy.sim.robot import mat_to_quat, quat_to_mat  # noqa: E402
 
 CAMERAS = ("agentview", "eye_in_hand")
+STATE_DIM = 21
+
+
+def proprio(o):
+    """Robot state vector from api.observe(): tcp_pos 3, tcp_quat 4, gripper_width 1, joints 7, tcp_wrench_ext/20 6."""
+    return np.concatenate([o["tcp_pos"], o["tcp_quat"], [o["gripper_width"]], o["joints"],
+                           np.asarray(o["tcp_wrench_ext"]) / 20.0]).astype(np.float32)
 
 
 class NearEnv(dm_env.Environment):
@@ -48,7 +56,8 @@ class NearEnv(dm_env.Environment):
 
     # ---------------------------------------------------------------- dm_env
     def observation_spec(self):
-        return {"pixels": specs.BoundedArray((IMAGE, IMAGE, 3 * len(CAMERAS)), np.uint8, 0, 255, "pixels")}
+        return {"pixels": specs.BoundedArray((IMAGE, IMAGE, 3 * len(CAMERAS)), np.uint8, 0, 255, "pixels"),
+                "state": specs.Array((STATE_DIM,), np.float32, "state")}
 
     def action_spec(self):
         return specs.BoundedArray((7,), np.float32, -1.0, 1.0, "action")
@@ -94,7 +103,7 @@ class NearEnv(dm_env.Environment):
 
     def _obs(self):
         v = self.api.camera()
-        return {"pixels": np.concatenate([v[c]["rgb"] for c in CAMERAS], axis=2)}
+        return {"pixels": np.concatenate([v[c]["rgb"] for c in CAMERAS], axis=2), "state": proprio(self.api.observe())}
 
 
 # ---------------------------------------------------------------------- DrQ-v2's wrappers (from drqv2/dmc.py, MIT)
@@ -104,6 +113,7 @@ class ExtendedTimeStep(NamedTuple):
     discount: Any
     observation: Any
     action: Any
+    state: Any = None
 
     def first(self):
         return self.step_type == StepType.FIRST
@@ -130,7 +140,11 @@ class FrameStackWrapper(dm_env.Environment):
 
     def _transform(self, time_step):
         assert len(self._frames) == self._num_frames
-        return time_step._replace(observation=np.concatenate(list(self._frames), axis=0))
+        return time_step._replace(observation={"pixels": np.concatenate(list(self._frames), axis=0),
+                                               "state": time_step.observation["state"]})
+
+    def state_spec(self):
+        return self._env.observation_spec()["state"]
 
     def _pixels(self, time_step):
         return time_step.observation[self._pixels_key].transpose(2, 0, 1).copy()
@@ -171,7 +185,8 @@ class ExtendedTimeStepWrapper(dm_env.Environment):
         if action is None:
             spec = self.action_spec()
             action = np.zeros(spec.shape, dtype=spec.dtype)
-        return ExtendedTimeStep(observation=time_step.observation, step_type=time_step.step_type, action=action,
+        return ExtendedTimeStep(observation=time_step.observation["pixels"], state=time_step.observation["state"],
+                                step_type=time_step.step_type, action=action,
                                 reward=time_step.reward or 0.0, discount=time_step.discount or 1.0)
 
     def observation_spec(self):
