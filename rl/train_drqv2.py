@@ -46,6 +46,21 @@ def _worker_init_fn(worker_id):
 replay_buffer._worker_init_fn = _worker_init_fn
 
 
+def _sample_episode(self):
+    """drqv2 assumes every episode is at least nstep long (DMC: always 1000 steps); here an episode can end in success
+    after one or two decisions, and sampling such an episode crashed the n-step index. Skip episodes shorter than nstep."""
+    import random
+    ep = None
+    for _ in range(100):
+        ep = self._episodes[random.choice(self._episode_fns)]
+        if replay_buffer.episode_len(ep) >= self._nstep:
+            return ep
+    return ep
+
+
+replay_buffer.ReplayBuffer._sample_episode = _sample_episode
+
+
 def make_agent(obs_spec, state_spec, action_spec, cfg, proprio):
     cfg.obs_shape = obs_spec.shape
     cfg.action_shape = action_spec.shape
@@ -203,7 +218,8 @@ class Workspace:
                 self.eval()
             with torch.no_grad(), utils.eval_mode(self.agent):
                 action = self._act(time_step, eval_mode=False)
-            if not seed_until_step(self.global_step):
+            # after a resume the on-disk buffer starts empty again, so the buffer size gates the updates as well
+            if not seed_until_step(self.global_step) and len(self.replay_storage) * cfg.action_repeat >= cfg.num_seed_frames:
                 metrics = self.agent.update(self.replay_iter, self.global_step)
                 self.logger.log_metrics(metrics, self.global_frame, ty="train")
                 if metrics:
