@@ -22,30 +22,126 @@ import sys
 import time
 from pathlib import Path
 
+import multiprocessing as mp
+from multiprocessing import shared_memory
+
 import mujoco
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "benchmark")]
 
-from assembly_policy.sim.env import BatchedAssemblyEnv, EnvConfig  # noqa: E402
+from assembly_policy.sim.env import STATE_SPEC, BatchedAssemblyEnv, EnvConfig  # noqa: E402
 from assembly_policy.sim.scene import build_xml  # noqa: E402
-from perception import CAMERA_NAMES, Cameras  # noqa: E402
+from perception import CAMERA_NAMES, FIXTURE_RGBA, OTHER_RGBA, PART_RGBA, Cameras, on_render_thread  # noqa: E402
 
 RES = int(os.environ.get("HYBRIDRSI_PPO_IMAGE", "128"))
+RENDER_WORKERS = int(os.environ.get("HYBRIDRSI_RENDER_WORKERS", "8"))   # 0/1 = render in this process
 OBS_KEYS = ("proprio", "img")
+
+
+def _rgb_views(cams, state):
+    """RGB of both cameras at `state` (perception.Cameras.capture without the depth pass; same colour marking)."""
+    cams.m.geom_rgba[cams.other_geoms] = OTHER_RGBA
+    cams.m.geom_rgba[cams.part_geoms] = PART_RGBA
+    cams.m.geom_rgba[cams.fixture_geoms] = FIXTURE_RGBA
+    mujoco.mj_setState(cams.m, cams.d, state, STATE_SPEC)
+    mujoco.mj_forward(cams.m, cams.d)
+    out = {}
+    for name, cam_id in cams.cams.items():
+        r = cams.rs[name]
+        r.update_scene(cams.d, camera=cam_id)
+        out[name] = r.render().copy()
+    return out
+
+
+def _render_worker(task_name, res, state_shm, img_shm, n, nstate, conn):
+    """One render process: its own EGL context and Cameras; renders the env ids it is sent from the shared state array
+    into the shared image array. Rendering is GPU-call bound (~0.9 ms per 128x128 image), so processes scale it."""
+    import traceback
+    os.environ.setdefault("MUJOCO_GL", "egl")
+    try:
+        cams = Cameras(build_xml(task_name, visual=True), w=res, h=res)
+        st_shm = shared_memory.SharedMemory(name=state_shm); im_shm = shared_memory.SharedMemory(name=img_shm)
+        states = np.ndarray((n, nstate), np.float64, buffer=st_shm.buf)
+        imgs = np.ndarray((n, len(CAMERA_NAMES), res, res, 3), np.uint8, buffer=im_shm.buf)
+        conn.send("ready")
+        while True:
+            ids = conn.recv()
+            if ids is None:
+                break
+            for i in ids:
+                v = on_render_thread(_rgb_views, cams, states[i])     # the GL context lives on the render thread
+                for c, name in enumerate(CAMERA_NAMES):
+                    imgs[i, c] = v[name]
+            conn.send(len(ids))
+    except Exception:
+        print("[render worker] " + traceback.format_exc().replace("\n", " | "), file=sys.stderr, flush=True)
+        try:
+            conn.send(("error", traceback.format_exc()))
+        except Exception:
+            pass
+    finally:
+        try:
+            st_shm.close(); im_shm.close()
+        except Exception:
+            pass
+
+
+class RenderPool:
+    """Renders env images in `workers` processes; the caller writes states to `self.states` and reads `self.imgs`."""
+
+    def __init__(self, task_name, res, n, nstate, workers):
+        self.n, self.workers = n, workers
+        self._st = shared_memory.SharedMemory(create=True, size=n * nstate * 8)
+        self._im = shared_memory.SharedMemory(create=True, size=n * len(CAMERA_NAMES) * res * res * 3)
+        self.states = np.ndarray((n, nstate), np.float64, buffer=self._st.buf)
+        self.imgs = np.ndarray((n, len(CAMERA_NAMES), res, res, 3), np.uint8, buffer=self._im.buf)
+        ctx = mp.get_context("spawn")
+        self.conns, self.procs = [], []
+        for w in range(workers):
+            a, b = ctx.Pipe()
+            p = ctx.Process(target=_render_worker, args=(task_name, res, self._st.name, self._im.name, n, nstate, b), daemon=True)
+            p.start(); self.conns.append(a); self.procs.append(p)
+        for a in self.conns:                      # workers report once their GL context and cameras exist
+            msg = a.recv()
+            if msg != "ready":
+                raise RuntimeError(f"render worker failed to start: {msg}")
+
+    def render(self, ids):
+        ids = np.asarray(ids)
+        parts = [ids[w::self.workers] for w in range(self.workers)]
+        for c, part in zip(self.conns, parts):
+            if len(part):
+                c.send(part.tolist())
+        for c, part in zip(self.conns, parts):
+            if len(part):
+                msg = c.recv()
+                if msg != len(part):
+                    raise RuntimeError(f"render worker failed: {msg}")
+
+    def close(self):
+        for c in self.conns:
+            try:
+                c.send(None)
+            except Exception:
+                pass
+        for p in self.procs:
+            p.join(timeout=5)
+        self._st.close(); self._st.unlink(); self._im.close(); self._im.unlink()
 
 
 class PixelEnv(BatchedAssemblyEnv):
     def __init__(self, task_name, n_envs, ecfg: EnvConfig | None = None, res=RES, action_space="ee",
-                 ee_step_m=0.0025, ee_step_rad=0.0436, ik_damping=1e-3):
+                 ee_step_m=0.0025, ee_step_rad=0.0436, ik_damping=1e-3, render_workers=RENDER_WORKERS):
         super().__init__([task_name], np.zeros(n_envs, dtype=np.int64), ecfg)
         assert action_space in ("ee", "joint"), action_space
         self.action_space, self.ee_step_m, self.ee_step_rad, self.ik_damping = action_space, float(ee_step_m), float(ee_step_rad), float(ik_damping)
         self.action_dim = 7 if action_space == "ee" else 8
-        self.cams = Cameras(build_xml(task_name, visual=True), w=res, h=res)
         self.res = res
-        self.img = np.zeros((self.N, len(CAMERA_NAMES), res, res, 3), np.uint8)
+        self.rpool = RenderPool(task_name, res, self.N, self.nstate, render_workers) if render_workers > 1 else None
+        self.cams = None if self.rpool is not None else Cameras(build_xml(task_name, visual=True), w=res, h=res)
+        self.img = self.rpool.imgs if self.rpool is not None else np.zeros((self.N, len(CAMERA_NAMES), res, res, 3), np.uint8)
         self.stats = dict(render=0.0, steps=0, ik=0.0)
         self._ik_d = mujoco.MjData(self.models[0].model)
         self._jp, self._jr = np.zeros((3, self.models[0].model.nv)), np.zeros((3, self.models[0].model.nv))
@@ -72,15 +168,25 @@ class PixelEnv(BatchedAssemblyEnv):
         return ja
 
     def _refresh(self, ids):
+        """Render the RGB of both cameras for envs `ids` (the policy only sees RGB; no depth pass)."""
         ids = np.atleast_1d(ids)
         if len(ids) == 0:
             return
         t0 = time.perf_counter()
-        for i in ids:
-            views = self.cams.capture(self.state[i])
-            for c, name in enumerate(CAMERA_NAMES):
-                self.img[i, c] = views[name]["rgb"]
+        if self.rpool is not None:
+            self.rpool.states[ids] = self.state[ids]
+            self.rpool.render(ids)
+        else:
+            for i in ids:
+                rgb = on_render_thread(_rgb_views, self.cams, self.state[i])
+                for c, name in enumerate(CAMERA_NAMES):
+                    self.img[i, c] = rgb[name]
         self.stats["render"] += time.perf_counter() - t0; self.stats["steps"] += len(ids)
+
+    def close(self):
+        if self.rpool is not None:
+            self.rpool.close()
+        super().close()
 
     def set_states(self, env_ids, states, task_ids=None):
         super().set_states(env_ids, states, task_ids)
