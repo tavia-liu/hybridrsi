@@ -155,7 +155,9 @@ class Trainer:
         self.wb = None
         if os.environ.get("WANDB_PROJECT"):
             import wandb
-            name = f"sac_resnet_frozen_{a.action_space}_{task_name(a.task)}_{a.family}_s{a.seed}"
+            base = f"{a.task}_{a.family}_s{a.seed}"
+            suffix = self.run.name[len(base):] if self.run.name.startswith(base) else "_" + self.run.name
+            name = f"sac_resnet_frozen_{a.action_space}_{task_name(a.task)}_{a.family}_s{a.seed}{suffix}"
             self.wb = wandb.init(project=os.environ["WANDB_PROJECT"], entity=os.environ.get("WANDB_ENTITY"),
                                  group=f"{task_name(a.task)}_{a.family}", name=name, config=self.args, dir=str(self.run),
                                  tags=["sac", "resnet", "pixel+proprio", a.action_space, a.family, a.task],
