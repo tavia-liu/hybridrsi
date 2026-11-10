@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 131.46,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: rod not in hand / alignment failed above the fixture"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 176.81,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: rod not in hand / alignment failed above the fixture"
+}
+}
+]

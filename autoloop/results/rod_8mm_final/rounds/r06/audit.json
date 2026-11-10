@@ -1,0 +1,36 @@
+{
+ "s00": {
+  "note": "Locate passed at t=0 (fit 49.2 mm, rms 0.17 mm, n=3384; the tracker agrees to 0.6 mm). Grasp attempt 0 used end0 s=21 mm. The fingers closed to 9 mm with the rod still on the board: the mask fit centre z stayed at 0.013. The policy opened, re-located the rod and found it pushed to ctr [0.587, 0.0155]. Attempt 1 used end0 s=11 mm, a candidate with finger_pts=108 and 'plan feasible False', and the policy used it anyway. It closed to a width of 3.7 mm and lifted. In k10 (t=11.76) and k11 (t=11.88 stage_done) the orange rod hangs under the fingers above the board, held 11 mm from one end, and the wrist view shows it between the jaws. In k12 (t=12.84, TCP z=0.20) the rod is still in the hand but sits visibly tilted in the jaws. Insert then started the reorienting move_to_joints (12.84 to 17.16). The rod fell out early in that move: the sheet frame at t=13.3 already shows it lying on the board next to the connector block, near where it started. In k13 (t=17.16) the rod is on the board, the wrist view shows empty jaws and the gripper width is -0.0011 (fully closed on nothing). The arm went down to z=0.092 over the fixture (k14). At t=19.12 the in-hand check found no rod and insert FAILED. The robot idled until the 40 s timeout and the rod stayed on the board (final frames). The tracker's part z (0.0127 at t=11.76) did not register the lift and should not be trusted here; the images and the mask fit agree the rod was lifted.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Rod lying untouched on the board. The fit length (49.2 mm) and rms (0.17 mm) are consistent, and the tracker agrees to 0.6 mm. The first grasp attempt went to the right place on the rod (k01\u2013k02)."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "Attempt 0 missed: the rod stayed on the board and was pushed about 15 mm. Attempt 1 lifted it: k10/k11 at t=11.76\u201311.88 show the rod in the jaws, off the board, and k12 at t=12.84 shows it carried to z=0.20. So the promised state (rod in fingers, off the board) held at the stage boundary. The hold was marginal, though: it was 11 mm from the rod end, on a candidate the policy itself rated plan-infeasible, and the rod was already tilting in the jaws after the lift. It slipped out within about 0.5 s of the next motion."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod dropped out of the fingers during insert's first reorienting move_to_joints (started at t=12.84; the rod is on the board by the sheet frame at t=13.3; k13 at t=17.16 shows empty jaws, width -0.0011). The arm descended over the empty fixture (k14, z=0.092). At t=19.12 the check reported 'rod not seen in hand' and the policy stopped. Nothing ever reached the fixture: the rod ended lying on the board. The failure reason is correct, but the cause is the rod being shed during the large wrist reorientation, not a camera alignment problem."
+   }
+  }
+ },
+ "s01": {
+  "note": "Locate passed at t=0 (fit 49.8 mm, rms 0.17 mm; the tracker agrees to 0.4 mm). Grasp attempt 0 used end1 s=21 mm (near the middle of the rod; finger_pts=9, plan feasible). It closed to a width of 3.4 mm and lifted. k05 (t=7.28 stage_done) shows the rod held crosswise in the jaws above the board. k06 (t=8.44, TCP z=0.20) shows the rod still in the hand at the top of the frame. Insert's move_to_joints (8.44 to 12.08) rotated the wrist toward the vertical-rod pose. During that move the rod left the fingers and was thrown aside: the sheet frame at t=10.6 shows it off the board to the left, and in k07 (t=12.08) it lies beyond the left board edge. The wrist view shows empty jaws, the gripper width is -0.0002, and the tracker puts the part at [0.189, 0.012, 0.0035], off the board. The arm went to z=0.082 over the fixture (k08). At t=13.92 the check found no rod and insert FAILED. Every frame from 13.3 to 40 s shows the rod off the board and the empty gripper parked over the blue fixture.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Rod lying untouched on the board. Fit length 49.8 mm, rms 0.17 mm, tracker agrees to 0.4 mm. The grasp descended onto the rod correctly (k01\u2013k03)."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k05 (t=7.28) and k06 (t=8.44, TCP z=0.20) show the rod clamped in the jaws, lifted well clear of the board and moving with the hand. The verifier's mask fit (centre z 0.013 to 0.084, 4 mm from the TCP) matches the images. The grip was not strong enough to survive the next motion."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The reorienting move_to_joints (t=8.44 to 12.08) shed the rod. It was flung off the left edge of the board (sheet t=10.6, k07 t=12.08), and the jaws are empty with width -0.0002. The arm descended over the empty fixture (k08 t=13.68), and the check at t=13.92 reported 'rod not seen in hand'. The rod never reached the fixture and ended off the board. The real cause is the rod slipping out during the fast wrist rotation, not an alignment failure."
+   }
+  }
+ }
+}

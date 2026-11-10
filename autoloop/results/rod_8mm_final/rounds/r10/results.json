@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 268.01,
+"stages": {
+"locate": "ok",
+"grasp": "FAIL: attempt 0: rod hanging, tilt 79.5deg, bottom z 0.0988 (board 0.0091), top 6mm from TCP axis, ext 35mm rms 0.56",
+"insert": "-"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 76.55,
+"stages": {
+"locate": "ok",
+"grasp": "FAIL: attempt 1: rod hanging, tilt 89.8deg, bottom z 0.0130 (board 0.0091), top 56mm from TCP axis, ext 50mm rms 0.17",
+"insert": "-"
+}
+}
+]

@@ -1,0 +1,36 @@
+{
+ "s00": {
+  "note": "Locate at t=0.00: the fit (ctr [0.577,0.004,0.013], ext 49.2 mm, rms 0.17 mm) matches the rod seen lying on the board in sheet frame t=0.0s. Grasp: the hand went down to tcp z 0.031 (t=2.36). Contact at tcp z 0.0179, then the close ended at width 9.0 mm with F about 51 N. That is a real pinch on the 8 mm rod: the 4 mm test lift raised the rod centre 13.1->19.6 mm. k04_t07.76 shows the orange rod between the pads, lifted with the hand. The policy measured the rod centre 5.8 mm along its axis from the TCP and 3 mm deep in the pads. Insert: from t=13.1 to t=25.9 a 16-call move_to_joints chain carried the hand to the fixture and turned the rod vertical. In k21_t27.92 the rod hangs vertically from the fingers above the blue fixture. The move at t=27.92 FAILED (err 15.8 mm) at tcp [0.341,0.077,0.150]; at t=30.12 the hand was at tcp z 0.071 (k22). The camera alignment loop made things worse each pass. Align 0 had tilt 9 deg and xy err (3.3,3.5) mm. Align 1-4 had tilt about 1.5 deg, but xy err grew steadily to (-7.2,-11.3) mm and the rod bottom stayed at z 0.067 (z err -14.7 mm). So each xy correction moved the rod away from the bore axis, which looks like a sign or frame error in the correction. The 3 mm step to bottom 0.0416 then stopped 25.4 mm short with F/T [-55,-109,145] N, so the hand was pushed against something. The measured rod bottom (z 0.066) was still about 28 mm above the fixture top (0.0376), so the rod tip probably was not what made contact. The images do not show clearly what the hand hit. The most likely candidate is the hand/finger body coming down on the tall grey part next to the fixture, which is under the right side of the hand in k22/final. AlignR 0 was worse again: xy err (-10.7,-17.3) mm, tilt 4.1 deg. The episode timed out with no further primitives. In final.png the rod is still held vertically in the fingers, above the fixture and off its bore axis, never in the bore. The tracker's part estimate stayed frozen at z 0.18 after t=25.9.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "The fit at t=0.00 (n=3384, rms 0.17 mm, ext 49.2 mm, horizontal axis, centre z 0.013) agrees with the tracker to 0.6 mm and with the lying rod in sheet frame t=0.0s."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "The close stopped at 9.0 mm width with about 51 N, consistent with gripping the 8 mm rod. The 4 mm lift raised the rod centre by 6.5 mm. k04_t07.76 shows the orange rod in the pads, lifted with the hand. In k21/k22/final the rod is still in the hand after the reorientation. The verifier's fresh fit gave the rod centre 85 mm up."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod never entered the bore; in final.png it is still in the gripper above the fixture. The move at t=27.92 failed (err 15.8 mm). Camera alignment went the wrong way: xy err grew from (1.0,-2.5) to (-7.2,-11.3) mm and then (-10.7,-17.3) mm over the align passes. The descent was blocked 25.4 mm short with about 145 N vertical force while the rod bottom was about 28 mm above the fixture top, so the hand probably collided with neighbouring geometry (most likely the tall grey part beside the fixture). Most of the 40 s went to the 16-step reorientation chain, and the stage ran out of time without a verdict."
+   }
+  }
+ },
+ "s01": {
+  "note": "Locate at t=0.00: the fit (ctr [0.378,0.186,0.013], axis along -y, ext 49.8 mm) matches the rod lying next to a tall grey post in sheet frame t=0.0s. The tracker's centre estimate is offset by 25 mm in y (0.161), but the fit is right. Grasp attempt 0 (t=2.8-7.56): the hand descended over the rod centre. In k03_t03.68 the rod is straight below the finger gap and the right side of the hand is right next to the grey post. The descent stopped at tcp z 0.0179 with Fz 35 N. Both closes collapsed to 3.4-3.5 mm with about 0 N, so the pads closed on nothing. The rod stayed at z 0.0131 and sat 9.1 mm below the TCP, i.e. under the fingertips, not between the pads (k05_t07.56: closed fingertips, rod lying beyond and below them). In s00 the same contact height worked with the rod only 2.9 mm deep, so here the hand was probably held high, most likely by the hand or a finger landing on the neighbouring post; the images are consistent with this but do not prove it. Attempt 1 (t=11.2-15.72, shift 6 mm, yaw 8 deg) did the same: width 3.5 mm, rod 9.0 mm below the TCP (k10). Between t=15.72 and t=21.72 the move_to timed out (servo_timeout, err 0.86) with wrench [-49,-90,209] N. k11_t21.72 shows the hand jammed down beside the grey post and the rod knocked crooked (diagonal in the wrist view; tracker x 0.377->0.393). Attempt 2 contacted at z 0.0201 with 43-71 N during the close and pushed the rod further, with the rod centre 13.7 mm below the TCP. During attempt 3 the move at t=33.20 timed out again (err 0.46). Attempt 3 closed to 4.5 mm on nothing, rod 10.4 mm below the TCP. Timeout at 40 s. In final.png the fingers are closed and empty above the rod, which still lies on the board next to the grey post, displaced from its start pose. Insert never ran.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "The fit at t=0.00 (n=2747, rms 0.17 mm, ext 49.8 mm, horizontal) agrees with the rod lying beside the grey post in sheet frame t=0.0s and k03."
+   },
+   "grasp": {
+    "ok": false,
+    "evidence": "Four attempts, and every close collapsed to 3.4-4.5 mm (the rod is 8 mm) with about 0 N grip force. After each 4 mm lift the rod was still on the board, 9-14 mm below the TCP, i.e. under the fingertips, not in the pads. Wrist frames k05/k10/final show closed, empty fingertips with the rod beyond and below them. The hand probably stopped high because it touched the tall grey post next to the rod. Two move_to calls hit servo_timeout, one with 209 N vertical force (k11_t21.72: hand jammed by the post, rod knocked crooked). The stage never returned a verdict before the 40 s timeout."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "Never ran: grasp did not finish before the timeout. In final.png the rod lies on the board, not in the fixture."
+   }
+  }
+ }
+}

@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": true,
+"safety": false,
+"timeout": false,
+"steps": 686,
+"error": null,
+"d_asm_mm": 0.4,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "-"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 98.75,
+"stages": {
+"locate": "ok",
+"grasp": "-",
+"insert": "-"
+}
+}
+]

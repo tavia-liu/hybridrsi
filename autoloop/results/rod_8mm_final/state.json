@@ -1,0 +1,22 @@
+{
+ "task": "R8",
+ "level": "final",
+ "perception": "camera",
+ "bank_dir": "/engrfs/project/chongjie/buzhao/autodeco/assembly-nist/data/banks_board",
+ "schedule": [
+  2,
+  5,
+  10,
+  15,
+  20
+ ],
+ "stage": 1,
+ "round": 25,
+ "max_rounds": 25,
+ "horizon_s": 40.0,
+ "phase": "done",
+ "session": "934caf48-695b-4262-ae38-6cdb7c007695",
+ "model": "claude-opus-5-5[1m]",
+ "audit_model": "claude-opus-5-5[1m]",
+ "started": "2026-11-08 11:46:29"
+}

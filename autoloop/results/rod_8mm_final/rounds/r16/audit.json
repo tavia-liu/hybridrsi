@@ -1,0 +1,87 @@
+{
+ "s01": {
+  "note": "SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": ""
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": ""
+   },
+   "insert": {
+    "ok": true,
+    "evidence": "your verifier said '-'"
+   }
+  }
+ },
+ "s04": {
+  "note": "SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": ""
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": ""
+   },
+   "insert": {
+    "ok": true,
+    "evidence": "your verifier said '-'"
+   }
+  }
+ },
+ "s00": {
+  "note": "t=0 locate: the fit matches the tracker to 0.6 mm and the rod lies flat on the board. t=1.6-7.24 grasp: top-down pinch near the rod centre. k04 (t=7.24) shows the rod lifted between the finger pads in both views; the fresh fit puts the rod centre at z 0.086, 2.9 mm deep in the TCP frame. t=12.56-21.76 insert: the hand turns the rod vertical over the blue fixture. One move_to_joints at t=14.08 FAILs (err 6.25 cm), but the chain carries on, and at k15 (t=21.76) the wrist view shows the rod hanging vertical right above the fixture bore. Alignment converged to within 0.3 mm xy and 0.4 deg of tilt. Every descent was blocked at the same place: at rod bottom 0.0356 the force rises to ~15 N and the rod slides up ~2.1 mm in the fingers. The fixture top is ~0.0364-0.0376, so the rod bottom is only about 1-2 mm below the fixture top, about 23 mm short of the 0.0125 seat. Back-out + re-align retries (alignR) gave the same block every time, so the rod is catching on the bore entry or rim. That fits a hidden xy/axis offset that the camera alignment does not see, or a bore entry tighter than the fit's 0.3 mm error. The policy still released 'at rod bottom ~0.0357'. k16 (t=39.16) shows the result: the released rod has tipped over and lies slanted across the top of the blue fixture (orange rod at ~45 deg against the fixture in both views), not in the bore. The verifier's numbers (axis z 0.725, top 14.6 mm low) correctly report a tipped rod. Note that 'release 7 mm inside the bore' was never satisfied, yet the policy released anyway.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "fit n=3384, rms 0.17 mm, ext 49.2 mm, axis horizontal, ctr z 0.013. Tracker agrees to 0.6 mm. The sheet t=0 frame shows the rod lying on the board where the fit says, and the later grasp landed on it."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k04 t=7.24: the rod sits between the finger pads, lifted ~7 cm above the board, and moves with the hand. Tracker part z 0.0858 matches the TCP. The fit puts the rod centre 2.9 mm into the pads; 3 N closing force was measured."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod was held vertical over the bore (k15 t=21.76), but every descent stopped at rod bottom ~0.0356 (\u2248 fixture top) with 14-15 N of contact and the rod sliding 2 mm up in the grip. That happened 4 times, and back-outs/re-aligns did not help. The policy released there anyway. In k16 t=39.16 the rod has fallen over and leans across the fixture top, outside the bore. Collision with the fixture top or bore rim, not a reach failure."
+   }
+  }
+ },
+ "s02": {
+  "note": "t=0 locate OK. t=1.56-6.24 grasp: the pinch closed to width 3.4 mm with almost no squeeze force (F [-0.2,0,-0.3]). That is a much narrower width than s00's 9.1 mm, which suggests the fingers caught only the edge of the rod. The fit sees only 22 mm of the 49 mm rod, and its centre sits 6.8 mm toward the fingertips. k04 (t=6.24) shows the rod lifted in the fingertips. The sheet at t=8.0 still shows it in hand. By k05 (t=10.76, during the move up to 20 cm/over the fixture) the gripper width reads -0.0002 (fingers fully closed on nothing). The global view shows the rod falling, tilted, beside the fingertips. At k06 (t=11.40) it lies across the top of the blue fixture. Nothing hit the hand (wrench 0), so it slipped out of a weak fingertip pinch during transport. The insert chain then rotated an empty hand (k09-k14 show the rod lying on the fixture top). After rotation the camera reported 'rod not seen in hand', and insert FAILed at t=21.44. The verifier's reason is correct. The tracker's part estimate stayed frozen at the start pose for the whole episode, so it is useless here.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "fit n=3577, rms 0.14 mm, ext 49.1 mm, horizontal, tracker agrees to 0.4 mm. The grasp reached the rod at the fitted spot."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "At the stage boundary (k04 t=6.24, sheet t=8.0) the rod is in the fingertips, lifted ~7 cm, moving with the hand, so the promised state held. It was marginal, though: width 3.4 mm with ~0 N squeeze, the rod centre 6.8 mm toward the fingertips, and only 22 mm of rod visible in the fit. The verifier should have rejected a tip grip of this kind. It is the root cause of the later drop."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod slipped out between t\u22488 and 10.76 during the lift/transport: grip width fell to -0.0002 with no external wrench. k06 t=11.40 shows it lying on the fixture top. The rest of the chain moved an empty hand, and the policy correctly reported 'rod not in hand'. The rod ends lying on top of the fixture, not in the bore."
+   }
+  }
+ },
+ "s03": {
+  "note": "t=0 locate: the rod lies ~3.5 cm from the fixture with obstacles around it. Grasp first pushed the rod sideways (touched its top at tcp z 0.0248, rod moved to [0.363,0.018]), then tried twice. Attempt 0 failed: the rod was not in the pads (4 mm up, the centre sat 8.5 mm away). Sheet frames t=10-19 show the rod tilted, propped on the fingers. Attempt 1 (+2.5 mm) passed. k08 (t=20.40) shows the rod lifted in the fingertips (centre 8.4 mm toward the tips, 9.6 mm off-centre along the rod, full 48 mm visible). Grasp used 20.4 s of the 40 s budget. Insert: the first 5 yaw candidates were all unreachable. It chose psi -15 with 2976 hand-hit points and a 168 deg rotation. The rotation chain ran from t=25.64 to 37.32. At k21 (t=37.32) a move_to_joints FAILs with err 5.7 cm and no contact force (wrench ~1-3 N). The global view is blocked by the arm, which is twisted back over itself; the wrist view still shows the rod in the fingers. Align 0 found the rod tilted 13.8 deg and 11.5 mm off in xy. k22 (t=38.76) shows the rod still held in the fingers, nowhere near the bore. The episode timed out at 40 s before insert could finish or record a verdict.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "fit n=2409, rms 0.23 mm, ext 48.9 mm, horizontal, tracker agrees to 0.5 mm. The rod is visible on the board at t=0 where the fit says."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k08 t=20.40: the rod is lifted ~7 cm in the fingers and moves with the hand. The fit sees all 48 mm at z 0.082. It is held at the fingertips (8.4 mm deep, 9.6 mm off-centre), but it stayed in the hand through t=38.76 (k22). Push + 2 attempts cost 20 s, half the episode."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "It never finished. The 168 deg rotation chain, with a high-cost (2976 hand hits) candidate, took ~12 s. The last chain move at t=37.32 stalled 5.7 cm short in open space (no contact wrench; the arm is visibly wound up, so a reach or joint-limit problem, not a collision). First alignment: tilt 13.8 deg, xy err 11.5 mm. Timeout at 40 s with the rod still in the hand above the fixture; it never entered the bore."
+   }
+  }
+ }
+}

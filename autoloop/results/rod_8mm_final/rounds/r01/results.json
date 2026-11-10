@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 201.26,
+"stages": {
+"locate": "ok",
+"grasp": "FAIL: rod ctr z 0.013->0.013 (mask z 0.063), ctr-tcp xy 17mm, width 0.0090",
+"insert": "-"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 80.04,
+"stages": {
+"locate": "ok",
+"grasp": "FAIL: rod ctr z 0.013->0.000 (mask z 0.069), ctr-tcp xy 14mm, width 0.0045",
+"insert": "-"
+}
+}
+]

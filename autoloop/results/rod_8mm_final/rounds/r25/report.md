@@ -1,0 +1,23 @@
+# Round 25 of 25: 3/5 starts succeeded, mean time 31.1 s
+
+## Verdicts per start (the auditor's for failed starts, yours for successes)
+s00 (SUCCESS 27.6 s): locate:PASS  grasp:PASS  insert:PASS
+    insert: your verifier said '-'
+    note: SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.
+s01 (SUCCESS 32.7 s): locate:PASS  grasp:PASS  insert:PASS
+    insert: your verifier said '-'
+    note: SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.
+s02 (TIMEOUT 40.0 s): locate:PASS  grasp:PASS  insert:FAIL
+    insert: The rod fell out of the hand during the lift/transfer and rotation (in hand at t=8.0; leaning on the fixture top at k05 t=10.76; flat on the fixture top at k06 t=11.40). The rest of the stage ran with an empty hand. Final state: rod lying across the fixture top, not in the bore. The policy's FAIL ('rod not in hand') is correct.
+    note: t=0 locate: the fit matches the rod lying on the board (ext 49.1 mm, rms 0.14 mm, and the tracker agrees within 0.4 mm). t=1.56-6.24 grasp: top-down pinch near one end (s=0.020). k04 (t=6.24) shows the rod held horizontally between the fingers about 8 cm up, and the wrist view shows it centred between the pads. The grip is shallow, though: the rod centre sits 6.8 mm deep in the TCP frame, which plan.md calls the fingertip zone. Insert: the sheet frame at t=8.0 still shows the rod in the hand during the lift and transfer. By k05 (t=10.76) the hand is high and away from the fixture, and the rod is no longer between the fingers. It is leaning on top of the blue fixture. By k06 (t=11.40) it has fallen flat across the fixture top. So the rod slipped out of the fingertip grip during the lift/transfer and rotation toward vertical, between about t=8 and t=10.7. The images show no contact with the fixture before the drop, because the hand was high above it. The policy kept running the rotation chain with an empty hand from t=10.8 to 18.9 (one move_to_joints FAIL at t=18.88, err 22 mm), then moved down. At t=21.44 the camera did not see the rod in the hand, and insert reported FAIL. That reason is correct. k17 and the final frames show the rod lying across the top of the fixture, not in the bore. The tracker's part estimate stayed frozen at the start pose for the whole episode and is useless here.
+s03 (TIMEOUT 40.0 s): locate:PASS  grasp:PASS  insert:FAIL
+    insert: Stage never finished. It chose an awkward yaw candidate (cheaper ones unreachable), and the rotation chain took about 12 s and ended in a move_to_joints FAIL (err 57 mm, low wrench, arm in open space). At t=38.76 the rod was 13.8 deg off vertical and 11.5 mm off the bore in xy. Timeout at 40 s with the rod still in the hand above the fixture, not inserted.
+    note: t=0 locate: the fit matches the rod lying close beside the blue fixture (ext 48.9 mm, rms 0.23 mm). Grasp: every candidate was blocked by the nearby fixture, so the policy first pushed the rod sideways (t=2-8). It then tried a pinch at end1 s=0.015. Attempt 0 (t=8.6) found the rod not in the pads, and the gripper reopened. Attempt 1 (t=14.7-20.4) is 2.5 mm higher. k08 (t=20.40) shows the rod held horizontally in the fingers about 8 cm above the board, gripped near one end (centre 9.6 mm off the TCP along the rod, 8.4 mm deep, so at the tips). Insert: the four cheapest yaw candidates were 'chain step 2 unreachable'. The policy picked psi=-15 (cost 112.9, 2976 hand-hit points) and a 168 deg rotation. The rotation chain ran from t=25.6 to 37.3, about 12 s for 12 move_to_joints calls. The last one ended with FAIL err 56.7 mm. The wrench stayed small (|F| < 3 N), and the frames show the arm folded in open space with its elbow right in front of the global camera (k21). That points to the arm stalling for reach/IK/joint-limit reasons, not a collision. k12 (t=28.28) and k21/k22 (t=37.3/38.8) show the rod still in the fingers, hanging roughly vertical above the fixture. At t=38.76 the pre-insert alignment measured 13.8 deg tilt and an 11.5 mm xy error, and the episode timed out at 40 s before any descent. The rod never entered the bore. It ended in the hand, above and to the side of the fixture, so insert never got to verify.
+s04 (SUCCESS 33.0 s): locate:PASS  grasp:PASS  insert:PASS
+    insert: your verifier said '-'
+    note: SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.
+
+Artifacts: attempts/r25/<id>/ (trace.json, summary.txt, keyframes/, sheet.png, episode.mp4)
+
+This was the last round. Write findings.md: the causes you found, the fixes with their evidence, what still fails
+and why, and which round was best. Then end your reply with READY.

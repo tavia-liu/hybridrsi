@@ -1,0 +1,36 @@
+{
+ "s00": {
+  "note": "t=0 locate: the own fit agrees with the tracker to 0.6 mm (rod at about (0.577, 0.004), lying). t=1.64\u20133.24 the hand pre-opens to 30 mm and goes down to TCP z 0.020 over end0, 11 mm from that end. t=3.84 it closes to 4.5 mm. t=4.52 it lifts to z 0.091. In k07 (t=4.64) the global view shows the orange rod lifted in the fingers, and the wrist view shows it pinched between the pads. From here on the tracker's part estimate stays frozen at (0.559, 0.017, 0.012), so it is stale and not usable. t=8.04 the arm swings over the blue fixture with a move_to_joints call. t=9.36 (k12) the wrist view shows the rod vertical in the fingers, directly over the blue fixture. The three camera-fit corrections end with an xy error of 0.3/0.6 mm, and the rod bottom is at z 0.048. Descent: the first 2 cm goes fine (F about 2 N). The next step stalls at TCP z 0.078 (servo_timeout at t=13.80, err 47 mm) with the wrench jumping to about (-10, 7, +9) N. So the hand is pushed up by contact with the fixture and is not stalled in open space. When it stopped, the rod bottom was still at about 4.7 cm, roughly 3.5 cm above the hole bottom (goal 0.0125), so the rod never entered the bore. Either the rod tip landed on the fixture's top face or the fingers/hand hit the top of the fixture. k15 shows the rod still vertical beside the blue block and does not settle which one. t=14.20 (k16) the gripper opens, and the wrist view shows the rod immediately tipping over sideways against the blue fixture. The retreat move_to fails as unreachable; a second retreat succeeds. k19 (t=14.92) and the sheet frames from 16 to 40 s show the rod leaning diagonally against the blue fixture, top at about 4.6 cm and axis z about 0.69, unchanged until the timeout. The insert verifier's FAIL reason is accurate.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Fit: n=3384, rms 0.17 mm, length 49.2 mm, centre z 0.013, axis horizontal; agrees with the tracker to 0.6 mm. k00 and the sheet at t=0 show the rod lying untouched on the board."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k07 (t=4.64): the rod is lifted in the fingers about 7 cm above the board, pinched near one end (width 4.5 mm). It stays in hand through the transport: k12 and k15 show it vertical in the fingers over the fixture. The grasp is 11 mm from the end, so about 39 mm of rod hangs below the TCP."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "Descent stalled at TCP z 0.078 (t=13.80, servo_timeout) against the fixture: the force rose from about 2 N to about 15 N, with the rod bottom still about 3.5 cm above the hole bottom, so the rod never entered the bore. At the open (t=14.20, k16) the rod fell sideways. In k19 and in the final sheet frames up to 40 s it leans against the blue fixture (axis z 0.69, top 16.7 mm low, 9 mm off in xy). It was never seated."
+   }
+  }
+ },
+ "s01": {
+  "note": "t=0 locate: the fit agrees with the tracker (0.4 mm); the rod lies along y at about (0.378, 0.186). t=2.72\u20134.88 the hand goes over end0 and down to z 0.020 at a point 11 mm from that end. t=5.48 it closes to 3.2 mm. t=6.24 it lifts to z 0.091. In k07 (t=6.36) the global view shows the rod held horizontally in the fingers above the board. The tracker reports z of about 0.001 here, which is wrong. Insert starts with a large move_to_joints (t=6.36 to 10.36). The sheet frame at t=8.0 (wrist view) shows the rod already loose and tumbling onto the board next to the blue fixture. By t=10.36 the gripper width is -0.0015, so the fingers have closed on nothing. k08 shows the rod lying on the board at about (0.466, 0.154). So the rod slipped out of the 11-mm-from-the-end pinch during the fast joint-space swing. The insert stage then measured the rod on the board: align 0 found an xy error of -154/-116 mm and a z error of 35 mm, which is clearly an empty hand. It only printed 'correction too large, ignored' and descended anyway. At t=15.36 (k12) the empty hand stalled at TCP z 0.078 (servo_timeout, err 62 mm) with a very large contact wrench of about (-29, 79, 171) N and a torque of about -21 Nm. So the hand/arm was pushing into an object (the board or a fixture) and not stalling in open space. The wrist view in k10\u2013k12 shows the hand close over the board, but the exact contact point is hidden by the arm in the global view. t=15.76 the gripper opens; t=17.28 the arm retreats. In k16 and every later sheet frame up to 40 s, the rod lies on the board at about (0.47, 0.15), about 14.5 cm from the goal. The policy's insert FAIL is accurate about the final state, but the real failure is that the rod was dropped during transport at the start of insert.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Fit: n=2747, rms 0.17 mm, length 49.8 mm, horizontal, centre z 0.013; agrees with the tracker to 0.4 mm. The sheet at t=0 shows the rod lying on the board."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k07 (t=6.36): the rod is held in the fingers about 7 cm above the board, so the stage's promised state 'held, off the board' did exist at the boundary. The hold was marginal, though: a pinch 11 mm from the end of a 50 mm rod, which was lost a few seconds later (see insert)."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod fell out of the fingers during the move_to_joints transport between t=6.36 and t=10.36: the sheet at t=8.0 shows it tumbling, k08 shows it on the board, and the gripper width reads -0.0015. The stage ignored the on-board camera fit ('correction too large') and drove the empty hand down until it was blocked by contact at TCP z 0.078 with about 171 N upward force (t=15.36). Final state (k16, sheet up to 40 s): the rod lies on the board about 145 mm from the goal."
+   }
+  }
+ }
+}

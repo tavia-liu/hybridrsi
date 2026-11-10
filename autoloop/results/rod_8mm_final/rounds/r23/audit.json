@@ -1,0 +1,87 @@
+{
+ "s00": {
+  "note": "SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": ""
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": ""
+   },
+   "insert": {
+    "ok": true,
+    "evidence": "your verifier said '-'"
+   }
+  }
+ },
+ "s04": {
+  "note": "SUCCESS although your verifier failed insert: the part reached the goal, so fix the verifier, not the motion.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": ""
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": ""
+   },
+   "insert": {
+    "ok": true,
+    "evidence": "your verifier said '-'"
+   }
+  }
+ },
+ "s01": {
+  "note": "t=0 locate: the fit agrees with the tracker to 0.4 mm. Rod lying on the board, axis along y. Grasp attempt 0 (t~3-9 s) and attempt 1 (t~9-15 s) touched the board and closed to width 3.4 mm, but the 4 mm-up check found the rod not held. Neither attempt knocked the rod over (the tracker still has it at z~0.013, although its z read 0.0015 / 0.0002 at t=15.9-16.6). Attempt 2 (shift 6 mm, yaw 8 deg, +1.2 mm) closed to 4.5 mm and lifted. At k10 t=21.80 the global view shows the orange rod horizontal between the fingertips, well above the board, and the wrist view shows it between the fingers. The rod centre sits 6.8 mm deep in the TCP frame, which is a tip grip, not a pads grip. Insert: lifted and rotated 93 deg in a joint chain. From t=27.6 to 34.9 move_to_joints FAILed 7 times (err up to 36 mm). k18 t=34.92 shows the rod already vertical high in open air with nothing touching it, so this is a slow or short chain move, not a collision. The arm reached the pre-pose only at t=37.32 (tcp z 0.0756, rod bottom ~0.052, about 14 mm above the fixture top at 0.0376). The alignment loop ran 5 iterations (xy err 0.3 mm, tilt 0.2 deg). Iterations 2-4 were already converged, and the loop kept going instead of starting the step-down. The 40 s timeout hit before any descent. final.png: the rod is held vertical in the fingers directly above the blue fixture bore, not inserted. The root cause is time: 3 grasp attempts used ~19 s, the chain ~13 s, and alignment did not exit when converged. Note: the tracker 'part' field in the trace is stale or wrong after the lift (z 0.0012 at t=21.8 while the rod is visibly lifted).",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Fit n=2747, rms 0.17 mm, ext 49.8 mm, matches the tracker to 0.4 mm. The rod is visibly lying untouched on the board at k00 t=0."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "Third attempt. k10 t=21.80 shows the rod horizontal in the fingertips, lifted ~7 cm. It later moves with the hand through the 93 deg rotation (k18, final). The grip is shallow: centre 6.8 mm deep, at the tips, width 4.5 mm. Two earlier attempts closed without holding it and cost ~13 s."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "Never descended. The pre-pose was reached only at t=37.32 after 7 failed chain move_to_joints calls (open-air stall, k18). Alignment converged (0.3 mm, 0.2 deg) but looped through align 4 without stepping down. Timeout at 40 s. final.png shows the rod held vertical ~14 mm above the fixture top, not in the bore. No stage_done was recorded."
+   }
+  }
+ },
+ "s02": {
+  "note": "t=0 locate OK. Grasp attempt 0 at t~1.6-6.2 s. k04 t=6.24 shows the rod horizontal between the fingertips, lifted off the board. However, only 22 mm of the 50 mm rod was seen by the fit (ext 22 mm), and the centre is 4.6 mm off in TCP-x and 6.8 mm deep (tip grip, width 3.4 mm). Insert chose psi 60 with a 144 deg rotation. k05 t=10.76: the rod is still in the fingers, tilted, above the blue fixture. k07 t=12.12 / k08 t=12.80: the rod has left the fingertips. The wrist view shows it lying by and against the blue fixture, away from the fingers. It slipped out of the shallow tip grip during the large rotation, with no contact with anything. By t=16.88 the gripper width is -0.0002 (fully closed on nothing). The chain kept going (10 calls, err up to 57 mm, then FAIL at 18.88), and the arm descended to the pre-pose at 21.24 empty-handed. stage_done at t=21.44: 'rod not seen in hand', FAIL. The reason is correct, but the drop was detected only after the whole chain and the descent, ~9 s late. From then to 40 s the arm sat idle. final.png: the rod lies diagonally across the top of the blue fixture, not in the bore. The tracker part estimate never moved from its t=0 value for the whole episode, so it is useless for monitoring here.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Fit n=3577, rms 0.14 mm, ext 49.1 mm. Rod visibly lying on the board at t=0."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k04 t=6.24 shows the rod lifted between the fingertips, so the promised state held at the boundary. But the grip was weak and off-centre (ext seen only 22 mm, centre 4.6 mm off along the rod, 6.8 mm deep, width 3.4 mm), and the rod fell out ~6 s later during the rotation. The verifier accepted a tip grip that could not survive a 144 deg reorientation."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod slipped out of the fingers between k05 t=10.76 and k07 t=12.12 during the rotation chain (in the air, no collision). Width -0.0002 at t=16.88. Policy FAIL at t=21.44 'rod not in hand' is correct, but it was detected late. final.png: the rod lies across the fixture top, not inserted."
+   }
+  }
+ },
+ "s03": {
+  "note": "t=0 locate OK. The rod lies right next to the goal fixture (centre 0.354, 0.042; bore at 0.345, 0.076), so most grasp candidates hit obstacles (finger_pts > 1000). Attempt 0 (t~2-9 s): contact, close to 4.5 mm. 4 mm up, the rod centre was at z 0.0305 and 8.5 mm *below* the TCP, so not held. k04 t=9.24 shows the attempt disturbed the rod: it is rotated/pushed, and the tracker moved from (0.377, 0.050) to (0.388, 0.019) by t=15.0. Attempt 1 (+2.5 mm) lifted it. At k08 t=20.40 the rod is between the fingertips, lifted, held ~9.6 mm off-centre along its length and 8.4 mm deep (at the tips). Insert: every low-cost psi was unreachable. It picked psi -15 (cost 113, hand hits 2976) with a 168 deg rotation. move_to_joints FAILed 12 times from t=25.6 to 37.3 (err 57 mm). The TCP position barely changed (0.353, 0.074, 0.165) while the wrist wound round. k21 t=37.32 and final show the arm folded back on itself and the wrist camera looking at its own links. Wrench was small throughout, so this is a reach / joint-chain stall in open space, not a collision. At t=38.76 it reached a pre-pose: align 0 tilt 13.8 deg, xy err 11.5 mm. Timeout at 40 s. final.png: the rod is still in the fingertips (wrist view) above or near the fixture. It is not in the bore, and the global view is blocked by the arm.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "Fit n=2409, rms 0.23 mm, ext 48.9 mm. Rod visibly lying on the board at t=0, next to the blue fixture."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "Second attempt. k08 t=20.40 shows the rod lifted in the fingertips, and it stays in the fingers to the end (final wrist view). The grip is off-centre (9.6 mm along the rod) and shallow (8.4 mm deep). Attempt 0 pushed and rotated the rod on the board (k04, tracker shifted ~3 cm)."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The only feasible plan was psi -15 with a 168 deg rotation and 2976 hand hits. There were 12 failed chain moves t=25.6-37.3 with the arm contorted (k21) but no contact. The pre-pose was reached at t=38.76 with tilt 13.8 deg and xy err 11.5 mm. Timeout before any alignment or descent. Rod held, not inserted. No stage_done was recorded."
+   }
+  }
+ }
+}

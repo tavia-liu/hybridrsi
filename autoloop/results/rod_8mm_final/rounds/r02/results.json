@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 33.26,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: mask fit: axis z 0.687, top z 0.0457 vs goal 0.0625 (-16.7mm), axis xy off 9.0mm"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 163.81,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: mask fit: axis z 0.024, top z 0.0137 vs goal 0.0625 (-48.8mm), axis xy off 144.5mm"
+}
+}
+]

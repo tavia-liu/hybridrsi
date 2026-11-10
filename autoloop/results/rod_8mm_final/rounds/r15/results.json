@@ -1,0 +1,77 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": true,
+"safety": false,
+"timeout": false,
+"steps": 666,
+"error": null,
+"d_asm_mm": 0.32,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "-"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": true,
+"safety": false,
+"timeout": false,
+"steps": 760,
+"error": null,
+"d_asm_mm": 0.47,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "-"
+}
+},
+{
+"id": "s02",
+"bank_idx": 522,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 43.21,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: rod not in hand or not near vertical above the fixture"
+}
+},
+{
+"id": "s03",
+"bank_idx": 410,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 38.27,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "-"
+}
+},
+{
+"id": "s04",
+"bank_idx": 165,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 62.38,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: mask fit: axis z 0.888, top z 0.0796 vs goal 0.0625 (+17.2mm), axis xy off 12.8mm"
+}
+}
+]

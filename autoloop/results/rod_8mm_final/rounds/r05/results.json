@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 135.66,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: rod not in hand / alignment failed above the fixture"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 37.17,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: mask fit: axis z 0.778, top z 0.0501 vs goal 0.0625 (-12.4mm), axis xy off 6.3mm"
+}
+}
+]

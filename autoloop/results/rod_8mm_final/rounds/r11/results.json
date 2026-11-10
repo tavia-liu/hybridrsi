@@ -1,0 +1,32 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 39.46,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: rod not in hand or not near vertical above the fixture"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 112.12,
+"stages": {
+"locate": "ok",
+"grasp": "FAIL: attempt 1: mask fit rod ctr z 0.013->0.013, rod ctr in TCP frame [0.1, 0.1, 75.1]mm, ext 50mm, rms 0.17mm, width 0.0035",
+"insert": "-"
+}
+}
+]

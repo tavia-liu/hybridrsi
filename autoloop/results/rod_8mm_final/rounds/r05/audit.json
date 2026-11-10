@@ -1,0 +1,36 @@
+{
+ "s00": {
+  "note": "Locate (t=0) fit the lying rod correctly (sheet t=0: orange rod lying on the board). Grasp attempt 0 (t=1.6-5.7): the fingers closed at width 9 mm and the rod was not lifted. The close pushed the rod: the tracker moves it from (0.599,-0.008) to (0.564,0.019,z 0.003), and the sheet at t=5.3 shows it knocked askew. The policy re-located it at (0.587,0.016). Every new candidate had finger obstacle points and plan=none, but attempt 1 ran anyway with 'plan feasible False' (t=7.7-11.8). In k10 (t=11.76) and k11 (t=11.88), the rod is clearly held between the fingertips and lifted off the board: the global view shows it under the gripper, and the wrist view shows it standing up from the fingertips. The tracker estimate stayed frozen at the board pose (0.5695,0.0335,0.0127) for the rest of the episode, so the tracker is stale once the rod is in hand. Insert: move_to_joints (t=11.9-15.8) swung the hand around (psi -165) at low height (tcp z 0.09->0.17) over the dense cluster of parts. At sheet t=13.3, the wrist view still shows the rod in the fingers right next to the dark multi-pin connector block. At k12 (t=15.80), the gripper is empty (width -0.0004, fully closed) and the rod lies on the board beside that connector. So the rod was lost during the reorientation sweep, either slipping out of a weak tip pinch (width 3.7 mm on a 8 mm rod, held only 11 mm from its end) or knocked out against the connector. The arm then went over the blue fixture (k13, k14: wrist view shows the empty fingers over the blue fixture). align found no rod and the stage failed at t=16.72. Nothing happened for the remaining 23 s; the rod ended on the board.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "fit ctr (0.577,0.004,0.013), ext 49.2 mm, rms 0.17 mm, agrees with the tracker to 0.6 mm; sheet t=0 shows the rod lying untouched on the board there."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "Attempt 0 failed and shoved the rod about 3 cm (tracker 0.599,-0.008 -> 0.570,0.034). Attempt 1, chosen despite plan=none, lifted it: k10/k11 (t=11.76/11.88) show the rod between the fingertips, off the board, about 7 cm up (mask fit ctr z 0.083). The pinch was marginal: width 3.7 mm, 11 mm from the rod end, with the insertion plan already infeasible."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "The rod fell out of the hand during move_to_joints (t=11.88->15.80). At sheet t=13.3 it is still in the fingers near the dark connector block. At k12 (t=15.80) it lies on the board beside that block and the fingers are closed on nothing (width -0.0004). The hand reached the fixture empty (k14, t=16.72), and the rod never got near the fixture. The verdict 'rod not in hand' is correct, but the cause is the transfer motion and the weak end pinch, not alignment."
+   }
+  }
+ },
+ "s01": {
+  "note": "Locate (t=0) fit the lying rod at (0.378,0.186). The tracker's 'part' printout differs by 25 mm in y (0.161) even though the log says tracker-vs-fit 0.4 mm, so the logged comparison quantity is not what the tracker prints. Grasp (t=2.8-7.2): pinch 21 mm from end0, width 3.4 mm. k05 (t=7.20) shows the rod horizontal in the fingertips, lifted well clear of the board (fit ctr z 0.084). Insert: move_to_joints to the fixture (t=12.12), then descent. k07 (t=12.80) wrist view shows the rod held vertically, pointing down toward the fixture. During the insert phase the global camera is fully blocked by the arm (sheet t=10-40), so only the wrist view and the log are evidence. Camera alignment converged (xy err <0.7 mm, tilt <0.7 deg). However, all three descent steps were blocked at a rod bottom of about 0.045, which is 7.5 mm ABOVE the measured fixture top (0.0376). The TCP stopped 2.8-3.7 mm short with a large contact force (F \u2248 [-30,105,163] N). That means the rod tip (or the hand) hit something solid above the height the plan thinks is the bore entry. Likely causes: the measured fixture top is wrong (k05 shows the blue fixture is a cylindrical boss on a flanged plate, so the ring heights may come from the flange), or the fitted rod bottom is biased. The policy then released while still blocked ('release; blocked'). After t=28 the wrist view shows no rod (k08, final). The rod is not visible in either final view because the arm hides it. The policy's own fresh fit puts it tilted about 39 deg from vertical (a_z 0.778), top 12.4 mm low, axis 6.3 mm off: leaning on or against the fixture, not seated. The episode timed out with it unseated.",
+  "stages": {
+   "locate": {
+    "ok": true,
+    "evidence": "fit ctr (0.378,0.186,0.013), ext 49.8 mm, rms 0.17 mm, axis along -y; sheet t=0 shows the orange rod lying on the board near the right edge, untouched."
+   },
+   "grasp": {
+    "ok": true,
+    "evidence": "k05 (t=7.20): rod horizontal between the fingertips, clearly above the board; mask fit ctr z 0.013->0.084, 4 mm from the TCP in xy; k07 (t=12.80) wrist view shows it still held after the transfer."
+   },
+   "insert": {
+    "ok": false,
+    "evidence": "Descent was blocked three times at rod bottom \u22480.045 (target 0.0416, fixture top measured 0.0376) with about 165 N vertical force, despite camera alignment <0.7 mm/<0.7 deg. So the rod stopped against something about 7 mm above the assumed bore entry; check the fixture-top estimate against the boss/flange geometry seen in k05. It released while blocked; the rod left the hand (k08/final wrist view empty) and, by the policy's own fit, ended tilted about 39 deg with its top 12.4 mm low and 6.3 mm off-axis. Not in the fixture at the end; the policy's FAIL is correct."
+   }
+  }
+ }
+}

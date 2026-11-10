@@ -1,0 +1,77 @@
+[
+{
+"id": "s00",
+"bank_idx": 222,
+"success": true,
+"safety": false,
+"timeout": false,
+"steps": 686,
+"error": null,
+"d_asm_mm": 0.4,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "-"
+}
+},
+{
+"id": "s01",
+"bank_idx": 589,
+"success": true,
+"safety": false,
+"timeout": false,
+"steps": 714,
+"error": null,
+"d_asm_mm": 0.39,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "-"
+}
+},
+{
+"id": "s02",
+"bank_idx": 522,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 213.39,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: no reachable vertical insertion pose with a valid rotation chain"
+}
+},
+{
+"id": "s03",
+"bank_idx": 410,
+"success": false,
+"safety": false,
+"timeout": true,
+"steps": 1000,
+"error": null,
+"d_asm_mm": 41.4,
+"stages": {
+"locate": "ok",
+"grasp": "FAIL: attempt 2: mask fit rod ctr z 0.013->0.013, rod ctr in TCP frame [9.2, 1.4, 104.9]mm, ext 49mm, rms 0.23mm, width -0.0009",
+"insert": "-"
+}
+},
+{
+"id": "s04",
+"bank_idx": 165,
+"success": true,
+"safety": false,
+"timeout": false,
+"steps": 869,
+"error": null,
+"d_asm_mm": 0.37,
+"stages": {
+"locate": "ok",
+"grasp": "ok",
+"insert": "FAIL: mask fit: axis z 0.984, top z 0.0804 vs goal 0.0625 (+18.0mm), axis xy off 4.9mm"
+}
+}
+]
