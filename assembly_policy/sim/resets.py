@@ -29,7 +29,7 @@ from .scene import PhysicsConfig, build_xml, ENV, GRIP, PART, ARM
 from .env import STATE_SPEC
 from .tasks import TASKS, scene_pose
 
-FAMILIES = ("loose", "pickup", "inhand", "partial", "near", "board")
+FAMILIES = ("loose", "pickup", "inhand", "partial", "near", "board", "near_up")
 PAD_OFFSET = 0.0015  # main finger-pad inner face sits 1.5 mm inboard of the finger joint origin
 
 
@@ -616,22 +616,27 @@ class ResetGenerator:
                 return self._state()
         return None
 
-    def near(self):
-        """Near-mating (AlphaNIST 'near-mating'; SGS 'Stable Grasp'): part grasped above its fixture."""
+    def near(self, upright=False):
+        """Near-mating (AlphaNIST 'near-mating'; SGS 'Stable Grasp'): part grasped above its fixture.
+        upright (family 'near_up'): the part keeps its assembled orientation up to the yaw offset (no tilt) and is
+        always held by an axial top grasp (hand pointing straight down), never a side grasp; the height, lateral and
+        yaw offsets stay random (scaled by the level r)."""
         rc = self.rcfg
         R_fix = quat_to_mat(self.fix_quat)
         axis = R_fix[:, 2]
         r = self.rng.uniform()
-        side = self.task.family in rc.transport_tilt_families and self.rng.random() < rc.side_grasp_frac
+        side = (not upright) and self.task.family in rc.transport_tilt_families and self.rng.random() < rc.side_grasp_frac
         for _ in range(60):
             h = self.depth + r * self.rng.uniform(0, rc.near_height)
             lat = R_fix[:, :2] @ self.rng.uniform(-1, 1, 2) * r * rc.near_lateral
             part_pos = self.goal_pos + axis * h + lat
             tilt_axis = R_fix[:, :2] @ self.rng.normal(size=2)
             q = quat_mul(axis_angle_quat(axis, r * self.rng.uniform(-rc.near_yaw, rc.near_yaw)), self.goal_quat)
-            part_quat = quat_mul(axis_angle_quat(tilt_axis, r * self.rng.uniform(0, rc.near_tilt)), q)
+            part_quat = q if upright else quat_mul(axis_angle_quat(tilt_axis, r * self.rng.uniform(0, rc.near_tilt)), q)
             if side:
                 g = self._down_grasp(part_pos, part_quat, kind="side_top", cone=rc.side_grasp_cone)
+            elif upright:
+                g = self._down_grasp(part_pos, part_quat, kind="axial_top")
             else:
                 g = self._down_grasp(part_pos, part_quat, kind="axial_top" if self.rng.random() < 0.7 else None)
             if g is None:
@@ -644,6 +649,10 @@ class ResetGenerator:
                 continue
             if len(self._contacts()) == 2 and np.linalg.norm(self._part_in_tcp() - rel0) < 0.01 \
                     and self._valid_contacts() and self._part_in_bounds():
+                if upright:                       # the pinch is a hinge: reject a part that swung while settling
+                    R_part = self.d.xmat[self.ix.part_body].reshape(3, 3)
+                    if math.degrees(math.acos(min(1.0, abs(float(R_part[:, 2] @ axis))))) > 3.0:
+                        continue
                 self.level = r
                 return self._state()
         return None
@@ -675,6 +684,8 @@ class ResetGenerator:
                 s = self.partial()
             elif family == "near":
                 s = self.near()
+            elif family == "near_up":
+                s = self.near(upright=True)
             elif family == "board":
                 s = self.board()
             else:
