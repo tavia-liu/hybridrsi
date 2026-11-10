@@ -28,7 +28,9 @@ WRIST_CAM = dict(pos="0.05 0 0", quat="0 0.707108 0.707108 0", fovy="75")       
 PART_RGBA = (1.0, 0.5, 0.05, 1.0)       # the part to assemble
 FIXTURE_RGBA = (0.15, 0.35, 0.85, 1.0)  # its fixture
 OTHER_RGBA = (0.5, 0.52, 0.56, 1.0)     # every other part and fixture on the board
-W, H = (int(v) for v in os.environ.get("CAP_CAM_RES", "1280x960").split("x"))            # fixed camera
+# One frame size for all three cameras: 640x480, the usual RGB-D camera / VLM-agent frame (robosuite renders 256x256 for
+# pixel RL; downsample from here). CAP_CAM_RES / CAP_WRIST_RES override it.
+W, H = (int(v) for v in os.environ.get("CAP_CAM_RES", "640x480").split("x"))              # fixed cameras
 WW, WH = (int(v) for v in os.environ.get("CAP_WRIST_RES", "640x480").split("x"))         # wrist camera
 _RENDERERS = {}        # model hash -> (model, data, renderers): one EGL context per model per process
 # An EGL context can be current in one thread only, so every GL call of the process (renderer creation, capture,
