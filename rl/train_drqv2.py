@@ -29,9 +29,21 @@ from omegaconf import OmegaConf  # noqa: E402
 import near_env  # noqa: E402
 import utils  # noqa: E402  (drqv2)
 from logger import Logger  # noqa: E402  (drqv2)
+import replay_buffer  # noqa: E402  (drqv2)
 from replay_buffer import ReplayBufferStorage, make_replay_loader  # noqa: E402  (drqv2)
 
 torch.backends.cudnn.benchmark = True
+
+
+def _worker_init_fn(worker_id):
+    """drqv2's version seeds `random` with a numpy uint32, which Python >= 3.11 rejects; same seeding, plain ints."""
+    import random
+    seed = int(np.random.get_state()[1][0]) + worker_id
+    np.random.seed(seed % 2**32)
+    random.seed(seed)
+
+
+replay_buffer._worker_init_fn = _worker_init_fn
 
 
 def make_agent(obs_spec, action_spec, cfg):
