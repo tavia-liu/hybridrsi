@@ -12,11 +12,11 @@ import api  # noqa: E402
 
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 spec = api.spec()
-assert "locate_part" not in spec and "part_model" not in spec and "mask" not in spec, spec
+assert "locate_part" not in spec and "part_model" not in spec and "goal_pos" not in spec, spec
 print(spec[:600], "...\n")
 
 env = api.make_env("R8", horizon_s=4.0)
-s0 = api.sample_starts("R8", "board", 1, seed=0)[0]
+s0 = api.sample_starts("R8", 1, seed=0)[0]
 env.set_states([0], s0[None], task_ids=[0])
 a = api.AssemblyAPI(env, np.random.default_rng(0), record=True)
 t0 = time.time()
@@ -28,7 +28,8 @@ from PIL import Image  # noqa: E402
 for k, v in views.items():
     Image.fromarray(v["rgb"]).save(out / f"{k}.png")
 obs = a.observe()
-assert not any(key.startswith("part") for key in obs), list(obs)
+assert not any(key.startswith(("part", "goal")) for key in obs), list(obs)
+print("instruction:", a.instruction())
 print("observe() keys:", sorted(obs))
 try:
     a.set_gripper(True); a.wait(5.0)

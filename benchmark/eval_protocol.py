@@ -26,9 +26,9 @@ from assembly_policy.sim.env import STATE_SPEC
 from assembly_policy.sim.scene import build_xml
 from assembly_policy.sim.tasks import TASKS, scene_pose
 
-START_FAMILY = "board"
-EVAL_SEED = 1000
-N_EVAL = 100
+START_FAMILY = api.START_FAMILY
+EVAL_SEED = api.EVAL_SEEDS.start
+N_EVAL = len(api.EVAL_SEEDS)
 DT = 0.04
 FPS = 25
 
@@ -61,7 +61,7 @@ def load_policy(path: Path):
 def starts(task, n=N_EVAL, seed=EVAL_SEED):
     """n `board` start states of the task: start k is the first state of generator seed `seed + k` (the same
     definition the cell server uses, so local and remote evaluation score the same starts)."""
-    return np.stack([api.sample_starts(task, START_FAMILY, 1, seed=seed + k)[0] for k in range(n)])
+    return np.stack([api.sample_starts(task, 1, seed=seed + k)[0] for k in range(n)])
 
 
 class Video:

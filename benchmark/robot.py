@@ -3,9 +3,8 @@ The policy sees robot state and images only: no part pose, no mask, no CAD model
 
     import robot
     print(robot.spec())                        # the methods of `api`
-    api = robot.start("R8", seed=0)            # one part lying on the board; 240 s
-    api = robot.start("R8", seed=0, family="near")   # other start families: loose, pickup (part in the open gripper),
-                                               # inhand (held, lifted), partial (partly inserted), near (held above the hole)
+    api = robot.start("R8", seed=0)            # one part dropped loose on the board, arm at home; 240 s
+    print(api.instruction())                   # the task in one sentence (orange part -> blue fixture)
     views = api.camera()                    # rgb, depth, K, cam_pos, cam_R per camera
     ...                                        # api.EpisodeOver is raised when the episode ends
     print(api.outcome())                       # success / safety / timeout / steps
@@ -17,7 +16,8 @@ The policy sees robot state and images only: no part pose, no mask, no CAD model
     free = b.free()                            # unscored motion (release, lift) between parts
     print(b.outcome())                         # seated per part, time
 
-Tasks: robot.tasks(). Episodes run on the cell server (ROBOT_ADDR); several may run at once.
+Tasks: robot.tasks(). Seeds 0..999 are yours for development (they only move the parts); 1000..1099 are the held-out
+evaluation starts and need the server's token. Episodes run on the cell server (ROBOT_ADDR); several may run at once.
 """
 from __future__ import annotations
 
@@ -142,9 +142,9 @@ def tasks() -> list:
         c.close()
 
 
-def start(task, seed=0, horizon=240.0, family="board", token=None) -> Episode:
+def start(task, seed=0, horizon=240.0, token=None) -> Episode:
     c = _Conn()
-    r = c.rpc(cmd="start", task=task, seed=int(seed), horizon=float(horizon), family=family, token=token or os.environ.get("ROBOT_TOKEN"))
+    r = c.rpc(cmd="start", task=task, seed=int(seed), horizon=float(horizon), token=token or os.environ.get("ROBOT_TOKEN"))
     return Episode(c, r["ep"])
 
 

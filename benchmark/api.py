@@ -1,9 +1,15 @@
 """The policy-facing API of the benchmark: one episode of one NIST task-board assembly.
 
 The simulator accepts 8-D relative joint increments at 25 Hz (q_target = q + scale*a, a[7] latches the gripper).
-AssemblyAPI wraps that with what a real cell offers a policy: the robot's state, three RGB-D cameras and
-task-agnostic kinematics (IK, servo to a pose, gripper). Nothing else: no part pose, no part mask, no CAD model, no
-pose estimator. The simulator's part pose and assembly distance are never exposed.
+AssemblyAPI wraps that with what a real cell offers a policy: the robot's state, three RGB-D cameras, a
+one-sentence instruction in natural language and task-agnostic kinematics (IK, servo to a pose, gripper). Nothing
+else: no part pose, no goal pose, no part mask, no CAD model, no pose estimator. In the images the part to assemble
+is orange and its fixture blue; everything else is grey. The simulator's part pose and assembly distance are never
+exposed.
+
+Seeds: 0..999 are for development and training, 1000..1099 are the held-out evaluation starts (EVAL_SEEDS). A seed
+sets only where the part lies (and, on the board, the order of the parts); the arm always starts at home with the
+gripper open.
 
 `spec()` renders the documentation of every method from the docstrings below, so what a policy is told cannot
 drift from what it can call. A policy is `policy(api)`; `run_episode()` runs it on one start state.
@@ -17,9 +23,20 @@ from assembly_policy.sim.env import STATE_SPEC, BatchedAssemblyEnv, EnvConfig
 from assembly_policy.sim.resets import ResetGenerator
 from assembly_policy.sim.robot import mat_to_quat, solve_ik
 from assembly_policy.sim.scene import build_xml
-from assembly_policy.sim.tasks import TASKS, scene_pose
+from assembly_policy.sim.tasks import TASKS
 
-METHODS = ("observe", "step", "constants", "camera", "ik", "move_to", "move_to_joints", "set_gripper", "wait")
+METHODS = ("instruction", "observe", "step", "constants", "camera", "ik", "move_to", "move_to_joints", "set_gripper", "wait")
+START_FAMILY = "board"                   # the only start: part dropped loose on the board, arm at home, gripper open
+TRAIN_SEEDS = range(0, 1000)
+EVAL_SEEDS = range(1000, 1100)
+
+INSTRUCTIONS = {
+    "rod": "Pick up the orange rod and insert it all the way into the hole of the blue fixture.",
+    "peg": "Pick up the orange peg and insert it all the way into the hole of the blue fixture.",
+    "gear": "Pick up the orange gear and push it all the way down onto the shaft of the blue fixture.",
+    "nut": "Pick up the orange nut and screw it all the way down the bolt of the blue fixture.",
+    "connector": "Pick up the orange connector and plug it all the way into the socket of the blue fixture.",
+}
 
 
 class EpisodeOver(Exception):
@@ -36,7 +53,6 @@ class AssemblyAPI:
         self._ik_d = mujoco.MjData(self.m)
         self._obs_d = mujoco.MjData(self.m)     # scratch for the contact solver in observe()
         self.task = TASKS[env.task_names[0]]
-        self._goal_pos, self._goal_quat = scene_pose(self.task.part_scene)
         ecfg = env.ecfg
         self.scale = (np.asarray(ecfg.action_scale_joints, float) if len(ecfg.action_scale_joints)
                       else np.full(7, ecfg.action_scale))
@@ -54,10 +70,11 @@ class AssemblyAPI:
         from perception import Cameras
         if hasattr(env, "tasks"):                                       # multi-part board (benchmark/multi_env.py)
             from multi_scene import build_multi_xml
-            xml = build_multi_xml(env.tasks, visual=True)
+            xml, suffix = build_multi_xml(env.tasks, visual=True), f"_{self.task.name}"
         else:
-            xml = build_xml(self.task.name, visual=True)
-        self._cams = Cameras(xml)
+            xml, suffix = build_xml(self.task.name, visual=True), ""
+        self._cams = Cameras(xml, part_body=f"part{suffix}", fixture_body=f"fixture{suffix}",
+                             fixture_site=f"fixture_frame{suffix}")
         self._views_cache = None
 
     def _views(self):
@@ -81,21 +98,24 @@ class AssemblyAPI:
         self.trace.append(e)
 
     # ------------------------------------------------------------------ raw
+    def instruction(self):
+        """The task, in one sentence. The part to assemble is the orange one and its fixture the blue one in the
+        camera images; everything else on the board is grey. Where they are, and the part's shape and size, are
+        not given anywhere else: read them off the images."""
+        return INSTRUCTIONS[self.task.family]
+
     def constants(self):
         """Fixed numbers of the MDP (same every episode)."""
         return dict(control_hz=round(1.0 / self.env.ecfg.control_dt), horizon_s=self.env.ecfg.horizon_s,
                     action_dim=8, action_scale=self.scale.round(4).tolist(),
-                    success_threshold_m=self.env.ecfg.success_threshold,
                     joint_limits=self.env.idx.jnt_range.round(3).tolist(),
-                    velocity_limit=self.env.vlim.round(3).tolist(),
-                    task=self.task.name, family=self.task.family)
+                    velocity_limit=self.env.vlim.round(3).tolist())
 
     def observe(self):
-        """Robot state, limited to what a real robot cell reports. The part is NOT in here: it is seen
-        only through the cameras (camera()).
+        """Robot state, limited to what a real robot cell reports. Neither the part nor its goal is in here:
+        both are seen only through the cameras (camera()).
 
-        pos are metres in the world frame, quat are (w,x,y,z). `goal_*` is the pose the part
-        must reach (success_threshold_m on both of its keypoints). `tcp` is the fingertip
+        pos are metres in the world frame, quat are (w,x,y,z). `tcp` is the fingertip
         centre, its +z is the approach direction (palm -> fingertips) and +y the finger closing
         axis. `joint_torque_ext` [7] and `tcp_wrench_ext` [6: force xyz, torque xyz, world
         frame] are the external load the environment exerts on the arm, as libfranka's
@@ -110,7 +130,6 @@ class AssemblyAPI:
             t=round(float(self.env.t[0]) * self.env.ecfg.control_dt, 2),
             time_left=round(float(self.env.horizon - self.env.t[0]) * self.env.ecfg.control_dt, 2),
             tcp_pos=fk["tcp_p"][0].copy(), tcp_quat=mat_to_quat(fk["tcp_R"][:1])[0],
-            goal_pos=self._goal_pos.copy(), goal_quat=self._goal_quat.copy(),
             joints=s[self.env.sq].copy(), joint_vel=s[self.env.sqd].copy(),
             gripper_width=float(s[self.env.sf].sum()),
             gripper_open_cmd=self.grip_open,
@@ -122,8 +141,8 @@ class AssemblyAPI:
     def camera(self):
         """The RGB-D cameras at this control step: dict(global=..., global2=..., wrist=...), each dict(rgb [H,W,3]
         uint8, depth [H,W] metres along the optical axis, K 3x3 intrinsics, cam_pos [3], cam_R [3,3]
-        camera-to-world). No segmentation, no part pose: what the part is and where it is must be read off the
-        images. `global` and `global2` are fixed over the board (front-right and front-left), `wrist` rides on the
+        camera-to-world). The part to assemble is orange, its fixture blue, everything else grey. No segmentation,
+        no poses: where the part and the fixture are must be read off the images. `global` and `global2` are fixed over the board (front-right and front-left), `wrist` rides on the
         hand looking along the fingers. A pixel (u,v) with depth d is at
         cam_pos + cam_R @ [(u+.5-cx)/fx*d, -(v+.5-cy)/fy*d, -d] in the world. Resolution {RES}; no sensor noise."""
         return {n: dict(v) for n, v in self._views().items()}
@@ -260,9 +279,10 @@ def spec():
             doc = doc.replace("{RES}", f"global/global2 {W}x{H}, wrist {WW}x{WH}")
         sig = str(inspect.signature(fn)).replace("(self, ", "(").replace("(self)", "()").split(" -> ")[0]
         lines.append(f"  api.{name}{sig}\n      {doc}")
-    lines += ["", "There is no insert/align/reorient/screw primitive; the assembly strategy is yours to compute. The part's "
-                  "pose, its segmentation and its CAD model are never given: everything about the part comes from your "
-                  "own vision on camera() images (RGB + depth, known intrinsics and camera poses).",
+    lines += ["", "There is no insert/align/reorient/screw primitive; the assembly strategy is yours to compute. The task is "
+                  "given only by instruction(): no part pose, no goal pose, no segmentation, no CAD model. Everything about the "
+                  "part and its fixture comes from your own vision on camera() images (RGB + depth, known intrinsics and "
+                  "camera poses); the episode succeeds when the part is fully seated in the fixture.",
               "`api.EpisodeOver` is raised as soon as the episode ends -- let it propagate."]
     return "\n".join(lines)
 
@@ -276,8 +296,9 @@ def make_env(task_name, nthread=1, horizon_s=None):
     return BatchedAssemblyEnv([task_name], [0], EnvConfig(**kw))
 
 
-def sample_starts(task_name, family, n, seed=0):
-    """n start states of one reset family ('loose'|'pickup'|'inhand'|'partial'|'near'|'board')."""
+def sample_starts(task_name, n, seed=0, family=START_FAMILY):
+    """n start states: the part dropped at a random pose on the board and settled, the arm at home, the gripper
+    open. The seed sets only the part's pose."""
     states, _ = ResetGenerator(task_name, seed=seed).generate(family, n)
     return states
 

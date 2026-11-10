@@ -220,14 +220,6 @@ def _panda_meshdir():
     return PANDA_XML.parent / "assets"
 
 
-# Rendering colours. The benchmark renders every part, fixture and the board in the same plain metal grey, so
-# nothing in the image singles the part out; HYBRIDRSI_COLORS=debug restores the orange part / blue fixture.
-import os as _os
-_DEBUG_COLORS = _os.environ.get("HYBRIDRSI_COLORS", "plain") == "debug"
-PART_RGBA = [1.0, 0.5, 0.05, 1] if _DEBUG_COLORS else [0.5, 0.52, 0.56, 1]
-FIXTURE_RGBA = [0.15, 0.35, 0.85, 1] if _DEBUG_COLORS else [0.5, 0.52, 0.56, 1]
-
-
 def build_xml(task_name: str, cfg: PhysicsConfig | None = None, visual: bool = False) -> str:
     cfg = task_physics(task_name, cfg or PhysicsConfig())
     task = TASKS[task_name]
@@ -355,7 +347,7 @@ def build_xml(task_name: str, cfg: PhysicsConfig | None = None, visual: bool = F
     fix = _add(world, "body", name="fixture", pos=fpos, quat=fquat)
     for k, g in enumerate(fixture_geoms(task, cfg)):
         _add_geom(fix, asset, f"fix{k}", g, dict(contype=ENV, conaffinity=PART | GRIP | ARM,
-                  friction=cfg.env_friction, solref=cfg.solref, solimp=cfg.solimp, rgba=FIXTURE_RGBA))
+                  friction=cfg.env_friction, solref=cfg.solref, solimp=cfg.solimp, rgba=[0.15, 0.35, 0.85, 1]))
     _add(fix, "site", name="fixture_frame", size=[0.002], group="4")
     # all other board fixtures: static convex-hull obstacles (their parts are absent)
     for prim, stem in sorted(BOARD_FIXTURES.items()):
@@ -375,7 +367,7 @@ def build_xml(task_name: str, cfg: PhysicsConfig | None = None, visual: bool = F
     for k, g in enumerate(part_geoms_with_mass(task, cfg)):
         _add_geom(part, asset, f"part{k}", g, dict(contype=PART, conaffinity=ENV | GRIP | ARM, condim="4",
                   friction=cfg.part_friction, solref=cfg.solref, solimp=cfg.solimp, priority="1",
-                  rgba=PART_RGBA))
+                  rgba=[1.0, 0.5, 0.05, 1]))
     _add(part, "site", name="part_frame", size=[0.002], group="4")
     if visual:   # draw the original asset meshes; the collision proxies (convex hulls, SDF hosts) go to hidden group 3
         _visual_meshes(root, task)
@@ -397,8 +389,8 @@ def _visual_meshes(root, task):
         return name
 
     off = dict(contype="0", conaffinity="0", group="2", density="0")
-    _add(root.find(".//body[@name='fixture']"), "geom", type="mesh", mesh=mesh(task.fixture_asset), rgba=FIXTURE_RGBA, **off)
-    _add(root.find(".//body[@name='part']"), "geom", type="mesh", mesh=mesh(task.part_asset), rgba=PART_RGBA, **off)
+    _add(root.find(".//body[@name='fixture']"), "geom", type="mesh", mesh=mesh(task.fixture_asset), rgba=[0.15, 0.35, 0.85, 1], **off)
+    _add(root.find(".//body[@name='part']"), "geom", type="mesh", mesh=mesh(task.part_asset), rgba=[1.0, 0.5, 0.05, 1], **off)
     for prim, stem in sorted(BOARD_FIXTURES.items()):
         if prim != task.fixture_scene:
             pos, quat = scene_pose(prim)

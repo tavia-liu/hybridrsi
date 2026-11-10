@@ -3,9 +3,10 @@
   SERVER_TOKEN=... PYTHONPATH=.:benchmark python benchmark/eval_remote.py --sandbox <dir> --task R8 --n 100 --out <dir>
   SERVER_TOKEN=... PYTHONPATH=.:benchmark python benchmark/eval_remote.py --sandbox <dir> --board --seeds 10 --out <dir>
 
-policy.py defines policy(api); for the board also, optionally, finish(api) (run after a success, unscored). Every
-board part starts with the arm at home and the gripper open, as in the single-part protocol, so no recover(api) is
-needed. Held-out starts are seeds RESERVED.. (reserved on the server).
+policy.py defines policy(api); for the board also, optionally, recover(api) (run before every part but the first,
+scored) and finish(api) (run after a success, unscored). The board is one continuous task: the arm starts at home
+once and goes on from wherever the previous part left it. Held-out starts are seeds RESERVED..RESERVED+99 (single
+part) and RESERVED..RESERVED+9 (boards), reserved on the server.
 Videos are rendered by the server into its --out under <name>/.
 """
 from __future__ import annotations

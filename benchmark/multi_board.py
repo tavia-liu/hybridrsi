@@ -88,7 +88,7 @@ def choose_layout(tasks, sp, rng, margin=0.006, pool_n=16):
     chosen, polys = {}, []
     for t in rng.permutation(tasks):
         t = str(t)
-        pool = api.sample_starts(t, "board", pool_n, seed=int(rng.integers(2**31 - 1)))
+        pool = api.sample_starts(t, pool_n, seed=int(rng.integers(2**31 - 1)))
         for m in (margin, margin / 2, 0.0):
             for S in pool:
                 poly = part_footprint(t, S[sp[:3]], S[sp[3:7]])
