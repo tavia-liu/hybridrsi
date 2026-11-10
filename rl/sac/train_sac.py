@@ -80,7 +80,12 @@ def parse(argv=None):
     ap.add_argument("--cost-coef", type=float, default=2e-5)
     ap.add_argument("--nthread", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", 8)))
     ap.add_argument("--image", type=int, default=RES)
-    ap.add_argument("--aug-pad", type=int, default=4, help="random shift before the frozen trunk (0 = none)")
+    ap.add_argument("--aug-pad", type=int, default=4, help="random shift before the encoder (0 = none)")
+    ap.add_argument("--encoder", default="resnet", choices=["resnet", "plainconv"],
+                    help="resnet = frozen ResNet-18 features in the buffer; plainconv = ManiSkill sac_rgbd CNN trained from "
+                         "scratch on raw pixels stored in the buffer (cameras concatenated along channels)")
+    ap.add_argument("--hidden", default="256,256", help="actor/critic MLP hidden sizes (ManiSkill: 512,256)")
+    ap.add_argument("--no-prop-norm", action="store_true", help="feed raw proprio (ManiSkill has no state normalisation)")
     # infrastructure
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--seed", type=int, default=0)
@@ -93,10 +98,10 @@ def parse(argv=None):
 class ReplayBuffer:
     """Ring buffer on the training device: pooled features (fp16), raw proprio, action, reward, terminal, next obs."""
 
-    def __init__(self, cap, act_dim, dev):
+    def __init__(self, cap, act_dim, dev, obs_shape=(FEAT_DIM,), obs_dtype=torch.float16):
         self.cap, self.dev, self.i, self.full = cap, dev, 0, False
-        self.feat = torch.zeros(cap, FEAT_DIM, dtype=torch.float16, device=dev)
-        self.nfeat = torch.zeros(cap, FEAT_DIM, dtype=torch.float16, device=dev)
+        self.feat = torch.zeros(cap, *obs_shape, dtype=obs_dtype, device=dev)
+        self.nfeat = torch.zeros(cap, *obs_shape, dtype=obs_dtype, device=dev)
         self.prop = torch.zeros(cap, PROP, device=dev)
         self.nprop = torch.zeros(cap, PROP, device=dev)
         self.act = torch.zeros(cap, act_dim, device=dev)
@@ -128,9 +133,12 @@ class Trainer:
         self.act_dim = 7 if a.action_space == "ee" else 8
         self.bank = load_bank(self.run, a.task, a.family, a.bank_size, a.bank_seed)
         self.rng = np.random.default_rng(a.seed)
-        self.trunk = ResNetEncoder(a.image, freeze=True).to(self.dev).eval()        # frozen ImageNet ResNet-18
+        self.plain = a.encoder == "plainconv"
+        self.trunk = None if self.plain else ResNetEncoder(a.image, freeze=True).to(self.dev).eval()   # frozen ImageNet ResNet-18
         self.aug = RandomShift(a.aug_pad).to(self.dev) if a.aug_pad > 0 else None
-        self.model = SACModel(PROP, self.act_dim, a.z_dim, a.n_critics, not a.no_layer_norm, a.init_alpha).to(self.dev)
+        hidden = tuple(int(x) for x in a.hidden.split(","))
+        self.model = SACModel(PROP, self.act_dim, a.z_dim, a.n_critics, not a.no_layer_norm, a.init_alpha, encoder=a.encoder,
+                              image=a.image, hidden=hidden, prop_norm=not a.no_prop_norm, last_act=self.plain).to(self.dev)
         self.q_opt = torch.optim.Adam(list(self.model.encoder.parameters()) + list(self.model.critic.parameters()), lr=a.lr)
         self.pi_opt = torch.optim.Adam(self.model.actor.parameters(), lr=a.lr)
         self.alpha_opt = torch.optim.Adam([self.model.log_alpha], lr=a.lr)
@@ -144,12 +152,15 @@ class Trainer:
                          derived=dict(steps_per_iteration=self.steps_per_iter, transitions_per_iteration=a.envs * self.steps_per_iter,
                                       updates_per_iteration=self.updates_per_iter,
                                       episode_max_steps=a.episode_steps, action_dim=self.act_dim, feat_dim=FEAT_DIM,
-                                      target_entropy=self.target_entropy, backup_entropy=a.backup_entropy, backbone="frozen"))
+                                      target_entropy=self.target_entropy, backup_entropy=a.backup_entropy,
+                                      backbone="plainconv from scratch (pixels in buffer)" if self.plain else "frozen"))
         (self.run / "config.json").write_text(json.dumps(self.args, indent=1))
         n = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        enc = (f"ManiSkill PlainConv from scratch on pixels in the buffer" if self.plain
+               else f"frozen ResNet-18 -> {FEAT_DIM}-d features in the buffer")
         print(f"[sac] task {a.task} ({task_name(a.task)}), {a.family} bank of {len(self.bank)} starts, {a.envs} envs, "
               f"{a.action_space} actions ({self.act_dim}-D), episodes <= {a.episode_steps} steps, {a.image}x{a.image} x 2 cameras "
-              f"-> frozen ResNet-18 -> {FEAT_DIM}-d features in the buffer ({a.buffer_size}), {n / 1e6:.2f}M trainable "
+              f"-> {enc} ({a.buffer_size}), {n / 1e6:.2f}M trainable "
               f"parameters, {a.n_critics} critics (min over {a.n_min_q}), utd {a.utd} ({self.steps_per_iter} step(s) of every env, "
               f"then {self.updates_per_iter} updates), aug pad {a.aug_pad}", flush=True)
         self.wb = None
@@ -164,7 +175,10 @@ class Trainer:
                                  id=os.environ.get("WANDB_RUN_ID", self.run.name.replace("/", "-")), resume="allow")
             self.wb.define_metric("transitions"); self.wb.define_metric("*", step_metric="transitions")
         self._maybe_resume()
-        self.buffer = ReplayBuffer(a.buffer_size, self.act_dim, self.dev)
+        if self.plain:
+            self.buffer = ReplayBuffer(a.buffer_size, self.act_dim, self.dev, (a.image, a.image, 6), torch.uint8)
+        else:
+            self.buffer = ReplayBuffer(a.buffer_size, self.act_dim, self.dev)
         t0 = np.random.default_rng(a.seed + 7).integers(0, a.episode_steps, a.envs)   # desynchronised episode clocks
         self.env = VecEnv(a.task, a.envs, self.ecfg, self._provider, t0, res=a.image, action_space=a.action_space,
                           ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad)
@@ -183,7 +197,10 @@ class Trainer:
             B, C, H, W, _ = img.shape
             x = self.aug(img.permute(0, 1, 4, 2, 3).reshape(B * C, 3, H, W).float())
             img = x.round_().clamp_(0, 255).to(torch.uint8).reshape(B, C, 3, H, W).permute(0, 1, 3, 4, 2).contiguous()
-        feat = pool_features(self.trunk.features(img)).to(torch.float16)
+        if self.plain:                                                          # [B, 2, H, W, 3] -> [B, H, W, 6]
+            feat = img.permute(0, 2, 3, 1, 4).reshape(img.shape[0], img.shape[2], img.shape[3], -1).contiguous()
+        else:
+            feat = pool_features(self.trunk.features(img)).to(torch.float16)
         prop = torch.as_tensor(sel(o["proprio"]), dtype=torch.float32, device=self.dev)
         return feat, prop
 
@@ -242,7 +259,8 @@ class Trainer:
         while self.transitions < a.total_transitions:
           for _step in range(self.steps_per_iter):
             with torch.no_grad():
-                self.model.norm.update(prop)
+                if not a.no_prop_norm:
+                    self.model.norm.update(prop)
                 if self.transitions < a.learning_starts:
                     act = torch.rand(N, self.act_dim, device=self.dev) * 2 - 1
                 else:
