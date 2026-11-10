@@ -5,6 +5,14 @@ api.camera() hands a policy (perception.Cameras: part orange, fixture blue, ever
 rendered at RES x RES after every control step. The simulator's part pose stays in the obs dict for logging only; the
 trainer never feeds it to the actor or the critic.
 
+Action space (action_space=):
+  "ee"    7 numbers in [-1, 1]: TCP translation (x, y, z, up to ee_step_m per control step), TCP rotation (rotation
+          vector in the world frame, up to ee_step_rad per control step) and the gripper (> 0.5 open, < -0.5 close,
+          else keep). The same action as rl/near_env.py (DrQ-v2): the TCP displacement is turned into joint increments
+          with one damped-least-squares step on the TCP Jacobian (the robot's own kinematics), clipped to the joint
+          action scale, and handed to the joint PD. Default.
+  "joint" 8 numbers: the simulator's native 7 relative joint-position increments + gripper (AlphaNIST).
+
 VecEnv = auto-resetting PixelEnv with a learner-side reset provider (assembly-nist rl/vecenv.LocalVecEnv).
 """
 from __future__ import annotations
@@ -14,6 +22,7 @@ import sys
 import time
 from pathlib import Path
 
+import mujoco
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,12 +37,39 @@ OBS_KEYS = ("proprio", "img")
 
 
 class PixelEnv(BatchedAssemblyEnv):
-    def __init__(self, task_name, n_envs, ecfg: EnvConfig | None = None, res=RES):
+    def __init__(self, task_name, n_envs, ecfg: EnvConfig | None = None, res=RES, action_space="ee",
+                 ee_step_m=0.0025, ee_step_rad=0.0436, ik_damping=1e-3):
         super().__init__([task_name], np.zeros(n_envs, dtype=np.int64), ecfg)
+        assert action_space in ("ee", "joint"), action_space
+        self.action_space, self.ee_step_m, self.ee_step_rad, self.ik_damping = action_space, float(ee_step_m), float(ee_step_rad), float(ik_damping)
+        self.action_dim = 7 if action_space == "ee" else 8
         self.cams = Cameras(build_xml(task_name, visual=True), w=res, h=res)
         self.res = res
         self.img = np.zeros((self.N, len(CAMERA_NAMES), res, res, 3), np.uint8)
-        self.stats = dict(render=0.0, steps=0)
+        self.stats = dict(render=0.0, steps=0, ik=0.0)
+        self._ik_d = mujoco.MjData(self.models[0].model)
+        self._jp, self._jr = np.zeros((3, self.models[0].model.nv)), np.zeros((3, self.models[0].model.nv))
+        self._scale = np.asarray(self.ecfg.action_scale_joints, float) if len(self.ecfg.action_scale_joints) else np.full(7, self.ecfg.action_scale)
+
+    def ee_to_joint(self, a):
+        """[N, 7] EE-delta actions -> [N, 8] joint actions for BatchedAssemblyEnv.step (one DLS step per env)."""
+        a = np.clip(np.asarray(a, np.float64).reshape(self.N, 7), -1.0, 1.0)
+        t0 = time.perf_counter()
+        m, d, idx = self.models[0].model, self._ik_d, self.idx
+        q = self.state[:, self.sq]
+        ja = np.zeros((self.N, 8))
+        eye = self.ik_damping * np.eye(6)
+        for i in range(self.N):
+            d.qpos[idx.arm_qpos] = q[i]
+            mujoco.mj_kinematics(m, d); mujoco.mj_comPos(m, d)
+            mujoco.mj_jacSite(m, d, self._jp, self._jr, idx.tcp_site)
+            J = np.vstack([self._jp[:, idx.arm_dof], self._jr[:, idx.arm_dof]])
+            dx = np.r_[a[i, :3] * self.ee_step_m, a[i, 3:6] * self.ee_step_rad]
+            dq = J.T @ np.linalg.solve(J @ J.T + eye, dx)
+            ja[i, :7] = np.clip(dq / self._scale, -1.0, 1.0)
+        ja[:, 7] = a[:, 6]
+        self.stats["ik"] += time.perf_counter() - t0
+        return ja
 
     def _refresh(self, ids):
         ids = np.atleast_1d(ids)
@@ -51,6 +87,8 @@ class PixelEnv(BatchedAssemblyEnv):
         self._refresh(env_ids)
 
     def step(self, action):
+        if self.action_space == "ee":
+            action = self.ee_to_joint(action)
         out = super().step(action)
         self._refresh(np.arange(self.N))
         return out
@@ -66,9 +104,10 @@ class VecEnv:
     the finished episodes' outcomes in the sampler, then draws k bank entries. Each env holds a pre-sampled `next`
     entry and resets to it the moment its episode ends; step() returns the pre-reset obs rows of the done envs."""
 
-    def __init__(self, task_name, n_envs, ecfg: EnvConfig, provider, t0=None, res=RES):
+    def __init__(self, task_name, n_envs, ecfg: EnvConfig, provider, t0=None, res=RES, **env_kw):
         self.provider = provider
-        self.env = PixelEnv(task_name, n_envs, ecfg, res)
+        self.env = PixelEnv(task_name, n_envs, ecfg, res, **env_kw)
+        self.action_dim = self.env.action_dim
         self.N, self.horizon = n_envs, self.env.horizon
         e, s = provider(n_envs)
         self.entry = e

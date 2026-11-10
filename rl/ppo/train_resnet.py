@@ -1,15 +1,19 @@
-"""PPO from pixels on the HybridRSI cell: symmetric actor-critic on a fine-tuned ImageNet ResNet-18 (rl/ppo/nets.py).
+"""PPO from pixels on the HybridRSI cell: symmetric actor-critic on an ImageNet ResNet-18 (rl/ppo/nets.py).
 
 Port of assembly-nist cap/train_resnet.py (+ cap/train_pixel.py + assembly_policy/train.py, AlphaNIST Algorithm 1) to
-this repository: same simulator (assembly_policy.sim.env: 8-D joint-increment + gripper actions at 25 Hz, reward
-1[d_asm < 1 mm] - control cost, termination on success / joint-velocity limit / 15 s), same PPO (32-step rollouts
-that slice across episodes, GAE, clipped surrogate + clipped value loss, adaptive-KL learning rate, 5 epochs x 4
-minibatches, action-rate smoothness term from iteration 5000), same 150-d proprio history; the images are the
-benchmark's two cameras (rl/ppo/pixel_env.py) instead of assembly-nist's global/wrist pair. No oracle part pose and no
-point clouds anywhere. Starts: a fixed bank of `family` starts drawn from the training seeds (api.sample_starts), with
-a uniform or the paper's beta (SGS) reset sampler. Random-shift augmentation is applied once when a frame is
-collected and the shifted frame is what is stored (assembly-nist gated this on model.training, which is False during
-collection, so its ResNet run was effectively un-augmented).
+this repository: same simulator (assembly_policy.sim.env: reward 1[d_asm < 1 mm] - control cost, termination on
+success / joint-velocity limit / 15 s), same PPO (32-step rollouts that slice across episodes, GAE, clipped surrogate +
+clipped value loss, adaptive-KL learning rate, 5 epochs x 4 minibatches, action-rate smoothness term from iteration
+5000), same 150-d proprio history; the images are the benchmark's two cameras (rl/ppo/pixel_env.py). No oracle part
+pose and no point clouds anywhere. Starts: a fixed bank of `family` starts drawn from the training seeds
+(api.sample_starts), with a uniform or the paper's beta (SGS) reset sampler.
+
+Two deliberate departures from the assembly-nist run (2026-11-10):
+  * actions are EE deltas (TCP translation 2.5 mm / rotation 2.5 deg per control step + gripper, the DrQ-v2 near_env
+    action; --action-space joint restores AlphaNIST's joint increments);
+  * the ResNet trunk is frozen: it runs once per collected frame (after the random-shift augmentation) and its
+    feature maps are what the rollout stores, so the PPO update trains only the pooling, the projection and the two
+    heads (--train-backbone fine-tunes the trunk at lr x --backbone-lr-mult instead, storing images).
 
   PYTHONPATH=.:benchmark:rl/ppo MUJOCO_GL=egl python rl/ppo/train_resnet.py --task P4 --run-dir runs/ppo/P4_near --envs 128
 """
@@ -30,13 +34,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "benchmark"), str(ROOT / "rl" / "ppo")]
 
 import api  # noqa: E402
-from assembly_policy.sim.env import HISTORY, PROPRIO_DIM, EnvConfig, parse_scales  # noqa: E402
+from assembly_policy.sim.env import EnvConfig, parse_scales  # noqa: E402
 from assembly_policy.sim.tasks import task_name  # noqa: E402
 from nets import RandomShift, ResNetActorCritic  # noqa: E402
 from pixel_env import RES, VecEnv  # noqa: E402
 from sampler import ResetSampler  # noqa: E402
-
-OBS = ("prop", "img")
 
 
 def parse(argv=None):
@@ -68,9 +70,13 @@ def parse(argv=None):
     ap.add_argument("--sampler", default="uniform", choices=["beta", "uniform"], help="beta = AlphaNIST SGS")
     ap.add_argument("--eps-q", type=float, default=1e-4, help="beta sampler floor")
     ap.add_argument("--history", type=int, default=50, help="outcomes kept per bank entry (L)")
-    # environment
+    # environment / actions
+    ap.add_argument("--action-space", default="ee", choices=["ee", "joint"],
+                    help="ee = TCP delta pose + gripper (7-D, as rl/near_env.py); joint = AlphaNIST joint increments (8-D)")
+    ap.add_argument("--ee-step-m", type=float, default=0.0025, help="max TCP translation per control step (m)")
+    ap.add_argument("--ee-step-rad", type=float, default=0.0436, help="max TCP rotation per control step (rad)")
     ap.add_argument("--action-scale-joints", default="0.05+0.05+0.05+0.06+0.07+0.1+0.17",
-                    help="rad per unit action for each arm joint ('+'-separated)")
+                    help="rad per unit joint action ('+'-separated); the EE action is clipped to this after the IK step")
     ap.add_argument("--cost-coef", type=float, default=2e-5, help="control cost c (actions, joint speeds, torques)")
     ap.add_argument("--action-rate-coef", type=float, default=1e-4,
                     help="smoothness: reward -= coef * sum_j (a_t,j - a_t-1,j)^2 over the arm actions")
@@ -78,8 +84,8 @@ def parse(argv=None):
     ap.add_argument("--nthread", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", 8)))
     # encoder
     ap.add_argument("--image", type=int, default=RES, help="camera resolution fed to the encoder (square)")
-    ap.add_argument("--backbone-lr-mult", type=float, default=0.1)
-    ap.add_argument("--freeze-backbone", action="store_true")
+    ap.add_argument("--train-backbone", action="store_true", help="fine-tune the ResNet trunk (default: frozen)")
+    ap.add_argument("--backbone-lr-mult", type=float, default=0.1, help="trunk lr multiplier when --train-backbone")
     ap.add_argument("--aug-pad", type=int, default=4, help="random-shift pad in pixels (0 = no augmentation)")
     # infrastructure
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -119,12 +125,16 @@ class Trainer:
         self.run = Path(a.run_dir)
         self.run.mkdir(parents=True, exist_ok=True)
         np.random.seed(a.seed); torch.manual_seed(a.seed)
+        self.frozen = not a.train_backbone
+        self.act_dim = 7 if a.action_space == "ee" else 8
+        self.arm_dim = self.act_dim - 1
+        self.obs_keys = ("prop", "feat") if self.frozen else ("prop", "img")
         self.bank = load_bank(self.run, a.task, a.family, a.bank_size, a.bank_seed)
         self.sampler = ResetSampler(len(self.bank), a.sampler, a.eps_q, a.history, seed=a.seed)
-        self.model = ResNetActorCritic(res=a.image, freeze=a.freeze_backbone, init_std=a.init_std, max_std=a.max_std,
-                                       min_std=a.min_std).to(self.dev)
+        self.model = ResNetActorCritic(res=a.image, act_dim=self.act_dim, freeze=self.frozen, init_std=a.init_std,
+                                       max_std=a.max_std, min_std=a.min_std).to(self.dev)
         groups = [dict(params=self.model.other_parameters(), lr=a.lr, lr_mult=1.0)]
-        if not a.freeze_backbone:
+        if not self.frozen:
             groups.append(dict(params=self.model.backbone_parameters(), lr=a.lr * a.backbone_lr_mult, lr_mult=a.backbone_lr_mult))
         self.opt = torch.optim.Adam(groups)
         self.lr, self.it, self.transitions = a.lr, 0, 0
@@ -132,30 +142,34 @@ class Trainer:
         self.aug = RandomShift(a.aug_pad).to(self.dev) if a.aug_pad > 0 else None
         self.ecfg = EnvConfig(nthread=a.nthread, cost_coef=a.cost_coef, action_scale_joints=parse_scales(a.action_scale_joints))
         self.args = dict(vars(a), env={k: v for k, v in dataclasses.asdict(self.ecfg).items() if k != "nthread"})
-        n = sum(p.numel() for p in self.model.parameters())
-        nb = sum(p.numel() for p in self.model.encoder.trunk.parameters())
         self.args["derived"] = dict(rollout_transitions=a.envs * a.steps, minibatch_size=a.envs * a.steps // a.minibatches,
                                     updates_per_iteration=a.epochs * a.minibatches,
                                     total_transitions_planned=a.iters * a.envs * a.steps,
-                                    episode_max_steps=int(round(self.ecfg.horizon_s / self.ecfg.control_dt)))
+                                    episode_max_steps=int(round(self.ecfg.horizon_s / self.ecfg.control_dt)),
+                                    action_dim=self.act_dim, backbone="frozen" if self.frozen else "trained")
         (self.run / "config.json").write_text(json.dumps(self.args, indent=1))
+        n = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        nb = sum(p.numel() for p in self.model.encoder.trunk.parameters())
         print(f"[ppo] task {a.task} ({task_name(a.task)}), {a.family} bank of {len(self.bank)} starts (seed {a.bank_seed}), "
-              f"{a.envs} envs, {a.image}x{a.image} x 2 cameras, {n / 1e6:.2f}M parameters, backbone {nb / 1e6:.2f}M "
-              f"({'frozen' if a.freeze_backbone else f'lr x{a.backbone_lr_mult}'}), aug pad {a.aug_pad}", flush=True)
+              f"{a.envs} envs, {a.action_space} actions ({self.act_dim}-D), {a.image}x{a.image} x 2 cameras, ResNet-18 trunk "
+              f"{nb / 1e6:.2f}M {'frozen' if self.frozen else f'trained at lr x{a.backbone_lr_mult}'}, "
+              f"{n / 1e6:.2f}M trainable parameters, aug pad {a.aug_pad}", flush=True)
         self.wb = None
         if os.environ.get("WANDB_PROJECT"):
             import wandb
-            name = f"ppo_resnet_{task_name(a.task)}_{a.family}_s{a.seed}"
+            name = f"ppo_resnet{'_frozen' if self.frozen else ''}_{a.action_space}_{task_name(a.task)}_{a.family}_s{a.seed}"
             self.wb = wandb.init(project=os.environ["WANDB_PROJECT"], entity=os.environ.get("WANDB_ENTITY"),
                                  group=f"{task_name(a.task)}_{a.family}", name=name, config=self.args, dir=str(self.run),
-                                 tags=["ppo", "resnet", "pixel+proprio", a.family, a.task],
+                                 tags=["ppo", "resnet", "pixel+proprio", a.action_space, a.family, a.task],
                                  id=os.environ.get("WANDB_RUN_ID", self.run.name.replace("/", "-")), resume="allow")
             self.wb.define_metric("transitions")                     # default x-axis: environment steps, not iterations
             self.wb.define_metric("*", step_metric="transitions")
         self._maybe_resume()
         horizon = int(round(self.ecfg.horizon_s / self.ecfg.control_dt))
         t0 = np.random.default_rng(a.seed + 7).integers(0, horizon, a.envs)   # desynchronized episode clocks
-        self.env = VecEnv(a.task, a.envs, self.ecfg, self._provider, t0, res=a.image)
+        self.env = VecEnv(a.task, a.envs, self.ecfg, self._provider, t0, res=a.image, action_space=a.action_space,
+                          ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad)
+        self.prev_act = torch.zeros(a.envs, self.arm_dim, device=self.dev)   # previous arm action (smoothness term)
 
     # ------------------------------------------------------------- helpers
     def _wrap_groups(self):
@@ -183,7 +197,13 @@ class Trainer:
             with torch.no_grad():
                 x = self.aug(x)
             img = x.round_().clamp_(0, 255).to(torch.uint8).reshape(B, C, 3, H, W).permute(0, 1, 3, 4, 2).contiguous()
+        if self.frozen:                                                      # trunk once per frame; store its maps
+            with torch.no_grad():
+                return dict(prop=prop, feat=self.model.encoder.features(img).to(torch.bfloat16))
         return dict(prop=prop, img=img)
+
+    def _encode(self, ob):
+        return self.model.encode_features(ob["feat"]) if self.frozen else self.model.encode(ob["img"])
 
     # ------------------------------------------------------------- checkpoints
     def save(self, keep=False):
@@ -216,7 +236,7 @@ class Trainer:
     def collect(self):
         a, N, T = self.a, self.a.envs, self.a.steps
         rate = a.action_rate_coef if self.it >= a.action_rate_start else 0.0
-        buf = {k: [] for k in OBS}
+        buf = {k: [] for k in self.obs_keys}
         acts, logps, vals, rews, dones, mus = [], [], [], [], [], []
         st = dict(done=0, success=0, safety=0, ep_len=[], sim=0.0)
         self.model.eval()
@@ -224,25 +244,25 @@ class Trainer:
             ob = self._obs(self.env.observe())
             with torch.no_grad():
                 self.model.norm.update(ob["prop"])
-                z = self.model.encode(ob["img"])
+                z = self._encode(ob)
                 dist = self.model.dist(z, ob["prop"])
                 act = dist.sample()
                 logp = dist.log_prob(act).sum(-1)
                 v = self.model.value(z, ob["prop"])
-                # smoothness term; the previous arm action is the newest proprio frame's columns 22..28
-                prev = ob["prop"].view(N, HISTORY, PROPRIO_DIM)[:, -1, 22:29]
-                rate_pen = (rate * ((act[:, :7] - prev) ** 2).sum(1)).cpu().numpy()
+                rate_pen = (rate * ((act[:, :self.arm_dim] - self.prev_act) ** 2).sum(1)).cpu().numpy()
             t1 = time.perf_counter()
             r, done, info, final_obs, finished = self.env.step(act.cpu().numpy())
             st["sim"] += time.perf_counter() - t1
+            self.prev_act = act[:, :self.arm_dim].clone()
+            self.prev_act[torch.as_tensor(done, device=self.dev)] = 0.0       # a new episode starts with no previous action
             r = r.astype(np.float32) - rate_pen.astype(np.float32)
             ids = np.nonzero(done)[0]
             if len(ids) and info["timeout"][ids].any():   # time-outs bootstrap from the final state's value
                 sel = np.nonzero(info["timeout"][ids])[0]
                 obf = self._obs(final_obs, sel)
                 with torch.no_grad():
-                    r[ids[sel]] += a.gamma * self.model.value(self.model.encode(obf["img"]), obf["prop"]).cpu().numpy()
-            for k in OBS:
+                    r[ids[sel]] += a.gamma * self.model.value(self._encode(obf), obf["prop"]).cpu().numpy()
+            for k in self.obs_keys:
                 buf[k].append(ob[k])
             acts.append(act); logps.append(logp); vals.append(v); mus.append(dist.mean)
             rews.append(torch.as_tensor(r, device=self.dev))
@@ -252,7 +272,7 @@ class Trainer:
                 st["ep_len"] += info["ep_len"][ids].tolist()
         ob = self._obs(self.env.observe())
         with torch.no_grad():
-            last_v = self.model.value(self.model.encode(ob["img"]), ob["prop"])
+            last_v = self.model.value(self._encode(ob), ob["prop"])
         batch = {k: torch.stack(v) for k, v in buf.items()}
         batch.update(act=torch.stack(acts), logp=torch.stack(logps), val=torch.stack(vals), mu=torch.stack(mus),
                      rew=torch.stack(rews), done=torch.stack(dones).float())
@@ -286,8 +306,8 @@ class Trainer:
                 for c0 in range(0, len(idx), a.micro_batch):     # gradient accumulation over micro-batches
                     cidx = idx[c0:c0 + a.micro_batch]
                     w = len(cidx) / len(idx)
-                    ob = {k: flat[k][cidx] for k in OBS}
-                    z = self.model.encode(ob["img"])
+                    ob = {k: flat[k][cidx] for k in self.obs_keys}
+                    z = self._encode(ob)
                     d = self.model.dist(z, ob["prop"])
                     logp = d.log_prob(flat["act"][cidx]).sum(-1)
                     ent = d.entropy().sum(-1).mean()
@@ -308,7 +328,7 @@ class Trainer:
                 elif 0.0 < kl.item() < a.desired_kl / 2.0:
                     self.lr = min(1e-3, self.lr * 1.5)
                 self._set_lr()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), a.max_grad)
+                torch.nn.utils.clip_grad_norm_([p for p in self.model.parameters() if p.requires_grad], a.max_grad)
                 self.opt.step()
                 self.model.project_()
                 logs["kl"] += kl.item()
@@ -326,19 +346,21 @@ class Trainer:
             losses = self.update(batch)
             self.it += 1
             n_ep = max(st["done"], 1)
+            est = self.env.env.stats
             rec = dict(it=self.it, transitions=self.transitions, fps=a.envs * a.steps / (time.time() - t0),
-                       t_sim=st["sim"], t_render=self.env.env.stats["render"], t_update=time.time() - t1, lr=self.lr,
+                       t_sim=st["sim"], t_render=est["render"], t_ik=est["ik"], t_update=time.time() - t1, lr=self.lr,
                        std=float(self.model.std().mean()), episodes=st["done"], success=st["success"] / n_ep,
                        safety=st["safety"] / n_ep, ep_len=float(np.mean(st["ep_len"])) if st["ep_len"] else 0.0,
                        visited=float((self.sampler.cnt > 0).mean()), **losses)
-            self.env.env.stats["render"] = 0.0
+            est["render"] = 0.0; est["ik"] = 0.0
             log_f.write(json.dumps(rec) + "\n"); log_f.flush()
             if self.wb is not None:
                 self.wb.log({k: v for k, v in rec.items() if isinstance(v, (int, float))}, step=self.it)
             if self.it % 10 == 0 or self.it <= 3:
                 print(f"it {self.it} T={self.transitions / 1e6:.1f}M fps={rec['fps']:.0f} train_success={rec['success']:.3f} "
                       f"safety={rec['safety']:.3f} len={rec['ep_len']:.0f} kl={losses['kl']:.4f} lr={self.lr:.1e} "
-                      f"std={rec['std']:.3f} sim={st['sim']:.1f}s render={rec['t_render']:.1f}s update={rec['t_update']:.1f}s", flush=True)
+                      f"std={rec['std']:.3f} sim={st['sim']:.1f}s (render {rec['t_render']:.1f}s ik {rec['t_ik']:.1f}s) "
+                      f"update={rec['t_update']:.1f}s", flush=True)
             if self.it % a.save_every == 0 or self.it == a.iters:
                 self.save(keep=self.it % a.keep_every == 0 or self.it == a.iters)
             if (time.time() - t_start) / 3600 > a.max_hours:

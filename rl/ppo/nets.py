@@ -140,8 +140,8 @@ class ResNetEncoder(nn.Module):
         self.n_cam, self.res, self.freeze = n_cam, res, freeze
         self.amp = bool(int(os.environ.get("HYBRIDRSI_AMP", "1")))     # bf16 autocast for the trunk; heads stay fp32
 
-    def forward(self, img):
-        """img uint8 [B, n_cam, H, W, 3] -> latent [B, out]."""
+    def features(self, img):
+        """img uint8 [B, n_cam, H, W, 3] -> trunk feature maps [B, n_cam, C, h, w] (bf16 under autocast)."""
         B = img.shape[0]
         x = img.permute(0, 1, 4, 2, 3).reshape(B * self.n_cam, 3, img.shape[2], img.shape[3]).float() / 255.0
         x = (x - self.mean) / self.std
@@ -152,9 +152,17 @@ class ResNetEncoder(nn.Module):
                     h = self.trunk(x)
             else:
                 h = self.trunk(x)
-        h = h.float()
+        return h.reshape(B, self.n_cam, *h.shape[1:])
+
+    def pool(self, h):
+        """feature maps [B, n_cam, C, h, w] -> latent [B, out]: spatial-softmax keypoints + channel means, projection."""
+        B = h.shape[0]
+        h = h.reshape(B * self.n_cam, *h.shape[2:]).float()
         f = torch.cat([self.ss(h), h.mean((2, 3))], -1).reshape(B, -1)
         return torch.tanh(self.ln(self.proj(f)))
+
+    def forward(self, img):
+        return self.pool(self.features(img))
 
 
 class ResNetActorCritic(nn.Module):
@@ -188,6 +196,10 @@ class ResNetActorCritic(nn.Module):
 
     def encode(self, img):
         return self.encoder(img)
+
+    def encode_features(self, h):
+        """Latent from stored trunk feature maps (frozen trunk: the trunk runs once per collected frame)."""
+        return self.encoder.pool(h)
 
     def dist(self, z, prop):
         mean = self.actor(torch.cat([z, self.norm(prop)], -1))
