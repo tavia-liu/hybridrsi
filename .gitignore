@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+plugin/build/
+data/
+runs/
+logs/
+*.mp4
+!docs/videos/*.mp4
+MUJOCO_LOG.TXT
+
+# local
+.venv/
+data/
+runs/
+*.log
+benchmark/runs/
+.venv

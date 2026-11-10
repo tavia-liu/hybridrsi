@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hybridrsi"
+version = "0.1.0"
+description = "HybridRSI: camera-only NIST Assembly Task Board 1 benchmark in MuJoCo (built on AssembleNIST)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mujoco>=3.3", "numpy", "scipy", "imageio[ffmpeg]", "pillow"]
+
+[tool.setuptools.packages.find]
+include = ["assembly_policy*"]
