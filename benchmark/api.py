@@ -132,7 +132,6 @@ class AssemblyAPI:
         tau_ext, wrench = self._external_load(J)
         return dict(
             step=int(self.env.t[0]), steps_left=int(self.env.horizon - self.env.t[0]),
-            t=round(float(self.env.t[0]) * self.env.ecfg.control_dt, 2),
             tcp_pos=fk["tcp_p"][0].copy(), tcp_quat=mat_to_quat(fk["tcp_R"][:1])[0],
             joints=s[self.env.sq].copy(), joint_vel=s[self.env.sqd].copy(),
             gripper_width=float(s[self.env.sf].sum()),
