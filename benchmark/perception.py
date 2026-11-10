@@ -24,9 +24,9 @@ import numpy as np
 from assembly_policy.sim.env import STATE_SPEC
 
 # robosuite's agentview sits 0.5 m in front of the table centre and 0.55 m above it, looking back at the table; our
-# board centre is at (0.5, 0, 0) with the robot at the origin behind it. Field of view 28 deg instead of robosuite's 45
-# so that the 0.5 m board fills the frame (at 45 deg it covered a third of it).
-AGENTVIEW = dict(pos=(1.0, 0.0, 0.55), lookat=(0.50, 0.0, 0.0), fovy=28.0)
+# board centre is at (0.5, 0, 0) with the robot at the origin behind it. Field of view 32 deg instead of robosuite's 45
+# so that the whole board, with a small margin for parts near its edges, fills the frame (45 deg covered a third of it).
+AGENTVIEW = dict(pos=(1.0, 0.0, 0.55), lookat=(0.50, 0.0, 0.0), fovy=32.0)
 EYE_IN_HAND = dict(pos="0.05 0 0", quat="0 0.707108 0.707108 0", fovy="75")         # robosuite robot0_eye_in_hand
 CAMERA_NAMES = ("agentview", "eye_in_hand")
 PART_RGBA = (1.0, 0.5, 0.05, 1.0)       # the part to assemble
