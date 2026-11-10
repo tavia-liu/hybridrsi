@@ -4,8 +4,9 @@
 
 One connection per client session (multiprocessing.connection, pickle). Requests are dicts with `cmd`:
   spec | methods | tasks
-  start(task, seed, horizon)                 -> ep        one part dropped loose on the board, arm at home, gripper open
-  board(seed, tasks, per_part_s)             -> ep, parts all parts physically on the board, one continuous episode
+  start(task, seed, steps)                   -> ep        one part dropped loose on the board, arm at home, gripper open
+  board(seed, tasks, steps_per_part)         -> ep, parts all parts physically on the board, one continuous episode with
+                                                         a pooled budget of steps_per_part * len(parts) control steps
   select(ep, part) | free(ep)                            board: make `part` the active (scored) one (the arm stays
                                                          where the previous part left it) / unscored motion
   call(ep, method, args, kwargs)             -> result, or episode_over + outcome
@@ -48,9 +49,9 @@ def public(o):
 
 
 class Single:
-    def __init__(self, task, seed, horizon, record):
+    def __init__(self, task, seed, steps, record):
         with _BUILD:
-            self.env = api.make_env(task, horizon_s=horizon)
+            self.env = api.make_env(task, steps=steps)
             s0 = api.sample_starts(task, 1, seed=seed)[0]
             self.env.set_states([0], s0[None], task_ids=[0])
             self.api = api.AssemblyAPI(self.env, np.random.default_rng(seed), record=record)
@@ -68,11 +69,11 @@ class Single:
 
 
 class Board:
-    def __init__(self, seed, tasks, per_part_s, record):
+    def __init__(self, seed, tasks, steps_per_part, record):
         self.tasks, self.record = tasks, record
         self.rng = np.random.default_rng(seed)
         with _BUILD:
-            self.env = MultiPartEnv(tasks, EnvConfig(nthread=1, horizon_s=per_part_s * len(tasks)))
+            self.env = MultiPartEnv(tasks, EnvConfig(nthread=1, horizon_s=steps_per_part * len(tasks) * api.CONTROL_DT))
             e1 = api.make_env(tasks[0]); sp = e1.sp.copy(); e1.close()
             self.env.reset_board(choose_layout(tasks, sp, self.rng), sp)
         self.api, self.frames, self.marks = None, [self.env.state[0].copy()], []
@@ -105,7 +106,7 @@ class Board:
         final = self.env.assembled()
         t = int(self.env.t[0])
         return dict(seated={k: bool(v["ok"]) for k, v in final.items()}, n_seated=sum(v["ok"] for v in final.values()),
-                    n=len(self.tasks), time_s=round(t * DT, 2), timeout=bool(t >= self.env.horizon),
+                    n=len(self.tasks), steps=t, step_budget=int(self.env.horizon), time_s=round(t * DT, 2), timeout=bool(t >= self.env.horizon),
                     active=public(self.api.outcome) if self.api is not None and self.api.done else None)
 
     def save_video(self, path: Path):
@@ -145,10 +146,10 @@ class Session(threading.Thread):
             ep = f"ep{self.n}"
             try:
                 if cmd == "start":
-                    self.eps[ep] = Single(str(r["task"]), seed, float(r.get("horizon", 240.0)), priv)
+                    self.eps[ep] = Single(str(r["task"]), seed, int(r.get("steps", api.STEPS_PER_PART)), priv)
                     return dict(ep=ep)
                 tasks = resolve_tasks(PRESETS.get(r.get("tasks", "board20"), r.get("tasks", "board20")))
-                self.eps[ep] = Board(seed, tasks, float(r.get("per_part_s", 240.0)), priv)
+                self.eps[ep] = Board(seed, tasks, int(r.get("steps_per_part", api.STEPS_PER_PART)), priv)
                 return dict(ep=ep, parts=list(tasks))
             except Exception:
                 _SLOTS.release()

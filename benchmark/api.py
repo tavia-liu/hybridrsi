@@ -27,6 +27,8 @@ from assembly_policy.sim.tasks import TASKS
 
 METHODS = ("instruction", "observe", "step", "constants", "camera", "ik", "move_to", "move_to_joints", "set_gripper", "wait")
 START_FAMILY = "board"                   # the only start: part dropped loose on the board, arm at home, gripper open
+CONTROL_DT = 0.04                     # 25 Hz
+STEPS_PER_PART = 6000                 # the episode budget, in control steps (= 240 s at 25 Hz)
 EVAL_SEEDS = range(0, 51)             # held-out; the cell server hands them out only with its token
 EVAL_BOARDS = range(0, 10)            # the scored boards
 TRAIN_SEEDS = range(51, 2**31 - 1)    # development and training
@@ -41,7 +43,7 @@ INSTRUCTIONS = {
 
 
 class EpisodeOver(Exception):
-    """The episode terminated (success, safety violation, or the time limit)."""
+    """The episode terminated (success, safety violation, or the step budget ran out)."""
 
 
 class AssemblyAPI:
@@ -107,7 +109,7 @@ class AssemblyAPI:
 
     def constants(self):
         """Fixed numbers of the MDP (same every episode)."""
-        return dict(control_hz=round(1.0 / self.env.ecfg.control_dt), horizon_s=self.env.ecfg.horizon_s,
+        return dict(control_hz=round(1.0 / self.env.ecfg.control_dt), step_budget=int(self.env.horizon),
                     action_dim=8, action_scale=self.scale.round(4).tolist(),
                     joint_limits=self.env.idx.jnt_range.round(3).tolist(),
                     velocity_limit=self.env.vlim.round(3).tolist())
@@ -116,7 +118,8 @@ class AssemblyAPI:
         """Robot state, limited to what a real robot cell reports. Neither the part nor its goal is in here:
         both are seen only through the cameras (camera()).
 
-        pos are metres in the world frame, quat are (w,x,y,z). `tcp` is the fingertip
+        `step` / `steps_left` count 25 Hz control steps against the episode's step budget (every primitive below
+        consumes them; thinking time does not). pos are metres in the world frame, quat are (w,x,y,z). `tcp` is the fingertip
         centre, its +z is the approach direction (palm -> fingertips) and +y the finger closing
         axis. `joint_torque_ext` [7] and `tcp_wrench_ext` [6: force xyz, torque xyz, world
         frame] are the external load the environment exerts on the arm, as libfranka's
@@ -128,8 +131,8 @@ class AssemblyAPI:
         J = self._jacobian()
         tau_ext, wrench = self._external_load(J)
         return dict(
+            step=int(self.env.t[0]), steps_left=int(self.env.horizon - self.env.t[0]),
             t=round(float(self.env.t[0]) * self.env.ecfg.control_dt, 2),
-            time_left=round(float(self.env.horizon - self.env.t[0]) * self.env.ecfg.control_dt, 2),
             tcp_pos=fk["tcp_p"][0].copy(), tcp_quat=mat_to_quat(fk["tcp_R"][:1])[0],
             joints=s[self.env.sq].copy(), joint_vel=s[self.env.sqd].copy(),
             gripper_width=float(s[self.env.sf].sum()),
@@ -196,7 +199,7 @@ class AssemblyAPI:
 
     def move_to(self, pos, quat, timeout_s=3.0, tol=0.01, gain=1.0):
         """Servo the TCP to a world pose. Returns True if the joint target was reached within
-        `tol` rad on every joint. Consumes episode time; raises EpisodeOver if it runs out."""
+        `tol` rad on every joint. Consumes steps of the budget; raises EpisodeOver when it runs out."""
         q_target, reachable = self.ik(pos, quat)
         if not reachable:
             self._rec("move_to", ok=False, why="unreachable", pos=np.round(pos, 4).tolist())
@@ -289,12 +292,9 @@ def spec():
 
 
 # ---------------------------------------------------------------------- episode plumbing
-def make_env(task_name, nthread=1, horizon_s=None):
-    """One-env simulator for `task_name`. horizon_s overrides the benchmark's episode limit."""
-    kw = dict(nthread=nthread)
-    if horizon_s is not None:
-        kw["horizon_s"] = float(horizon_s)
-    return BatchedAssemblyEnv([task_name], [0], EnvConfig(**kw))
+def make_env(task_name, nthread=1, steps=STEPS_PER_PART):
+    """One-env simulator for `task_name` with a budget of `steps` control steps (the simulator keeps it as seconds)."""
+    return BatchedAssemblyEnv([task_name], [0], EnvConfig(nthread=nthread, horizon_s=float(steps) * CONTROL_DT))
 
 
 def sample_starts(task_name, n, seed=0, family=START_FAMILY):

@@ -30,7 +30,7 @@ on the board, the order in which they are scored).
 ## Scoring
 
 The benchmark score is `robot.board(seed)`: one continuous task with all 20 parts physically on the board in a random
-order, 240 s per part pooled, scored by the parts seated at the end, over the 10 held-out boards (seeds 0..9)
+order, a pooled budget of 6000 control steps per part (25 Hz, so 240 s of robot time per part; thinking time is free), scored by the parts seated at the end, over the 10 held-out boards (seeds 0..9)
 (`benchmark/eval_remote.py --board`). Single-part episodes (`benchmark/eval_protocol.py`, `robot.start`) use the same
 start and are for development.
 

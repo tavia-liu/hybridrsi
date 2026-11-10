@@ -154,7 +154,7 @@ def render(tasks, frames, stages, out, width=1280, height=720, banner_s=3.0):
 
 def run_seed(seed, tasks, policy_mod, a, out, sp_single):
     rng = np.random.default_rng(seed)
-    env = MultiPartEnv(tasks, EnvConfig(nthread=1, horizon_s=a.per_part_s * len(tasks)))
+    env = MultiPartEnv(tasks, EnvConfig(nthread=1, horizon_s=a.steps_per_part * len(tasks) * api.CONTROL_DT))
     dt = env.ecfg.control_dt
     layout = choose_layout(tasks, sp_single, rng)
     env.reset_board(layout, sp_single)
@@ -237,7 +237,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-seeds", type=int, default=1)
     ap.add_argument("--video-seeds", type=int, default=-1, help="seeds rendered to mp4 (default: all)")
-    ap.add_argument("--per-part-s", type=float, default=40.0)
+    ap.add_argument("--steps-per-part", type=int, default=6000, help="budget per part in 25 Hz control steps, pooled over the board")
     ap.add_argument("--retries", type=int, default=2, help="extra attempts on a part after a safety stop")
     ap.add_argument("--width", type=int, default=1280); ap.add_argument("--height", type=int, default=720)
     ap.add_argument("--tag", default="", help="suffix of the default output folder")
@@ -249,7 +249,7 @@ def main():
     policy_mod = load_module(Path(a.policy))
     e1 = api.make_env(tasks[0]); sp_single = e1.sp.copy(); e1.close()
     allres = [run_seed(s, tasks, policy_mod, a, out, sp_single) for s in range(a.seed, a.seed + a.n_seeds)]
-    summ = dict(tasks=tasks, policy=str(a.policy), order=a.order, per_part_s=a.per_part_s, n_seeds=len(allres),
+    summ = dict(tasks=tasks, policy=str(a.policy), order=a.order, steps_per_part=a.steps_per_part, n_seeds=len(allres),
                 all_seated_rate=round(100 * np.mean([r["all_seated"] for r in allres]), 1),
                 seated_mean=round(float(np.mean([r["n_seated"] for r in allres])), 2),
                 per_task_seated={t: round(100 * np.mean([r["final"][t]["ok"] for r in allres]), 1) for t in tasks},

@@ -15,7 +15,7 @@ spec = api.spec()
 assert "locate_part" not in spec and "part_model" not in spec and "goal_pos" not in spec, spec
 print(spec[:600], "...\n")
 
-env = api.make_env("R8", horizon_s=4.0)
+env = api.make_env("R8", steps=100)
 s0 = api.sample_starts("R8", 1, seed=0)[0]
 env.set_states([0], s0[None], task_ids=[0])
 a = api.AssemblyAPI(env, np.random.default_rng(0), record=True)
@@ -41,7 +41,7 @@ assert a.trace and "part" not in a.trace[-1]
 # held-out protocol, one start, with video
 import eval_protocol  # noqa: E402
 pol = eval_protocol.load_policy(Path("examples/noop_policy.py"))
-env2 = api.make_env("R8", horizon_s=3.0)
+env2 = api.make_env("R8", steps=75)
 summary, rows = eval_protocol.evaluate(env2, pol, "R8", n=1, seed=0, record=True,
                                        on_episode=lambda k, r: eval_protocol.Video("R8").write(r, out / "e000.mp4"), verbose=False)
 print("eval:", json.dumps(summary)[:300])

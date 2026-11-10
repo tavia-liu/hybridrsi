@@ -1,7 +1,7 @@
 """Held-out evaluation: the NIST task-board benchmark, one part per episode.
 
 Protocol. The part lies loose on the board at a random settled pose, the robot is at its home configuration with
-the gripper open (reset family `board`); the policy has --horizon seconds (default 40) to assemble it. Success:
+the gripper open (reset family `board`); the policy has --steps control steps (default 6000 = 240 s at 25 Hz) to assemble it. Success:
 both of the part's keypoints within 1 mm of their goal, for whichever of the part's mesh symmetries fits best (a
 rod seated either way up counts). Start k comes from the simulator's reset generator with seed --seed + k: seeds
 0..50 are the held-out set; develop on seeds 51 and up. Every episode is rendered to an mp4. The policy file
@@ -123,7 +123,7 @@ def evaluate(env, policy, task, n=N_EVAL, seed=EVAL_SEED, record=True, on_episod
         if verbose and (k + 1) % 10 == 0:
             print(f"[eval] {k + 1}/{len(S)}: {sum(x['success'] for x in rows)} ok  ({time.time() - t0:.0f}s)", flush=True)
     ok = [x for x in rows if x["success"]]
-    summary = dict(task=task, horizon_s=env.ecfg.horizon_s, seed=seed,
+    summary = dict(task=task, step_budget=int(env.horizon), seed=seed,
                    protocol=f"NIST task board, one part: {len(S)} `{START_FAMILY}` starts (part loose on the board, robot at "
                             f"home, gripper open) from seed {seed}; success = keypoints within 1 mm (mesh symmetries allowed)",
                    n=len(rows), n_ok=len(ok), success_rate=round(100 * len(ok) / max(len(rows), 1), 1),
@@ -154,7 +154,7 @@ def main():
     ap.add_argument("--policy", required=True, help="a policy.py defining policy(api)")
     ap.add_argument("--n", type=int, default=N_EVAL)
     ap.add_argument("--seed", type=int, default=EVAL_SEED, help=f"first start-state seed ({EVAL_SEED}..{EVAL_SEED + N_EVAL - 1} = held-out)")
-    ap.add_argument("--horizon", type=float, default=40.0, help="episode time limit in seconds")
+    ap.add_argument("--steps", type=int, default=api.STEPS_PER_PART, help="episode budget in 25 Hz control steps")
     ap.add_argument("--out", default=None, help="output folder (default runs/eval/<task>_<policy stem>_s<seed>)")
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--width", type=int, default=640); ap.add_argument("--height", type=int, default=480)
@@ -163,7 +163,7 @@ def main():
     policy = load_policy(path)
     out = Path(a.out or Path("runs/eval") / f"{a.task}_{path.stem}_s{a.seed}")
     (out / "episodes").mkdir(parents=True, exist_ok=True)
-    env = api.make_env(a.task, horizon_s=a.horizon)
+    env = api.make_env(a.task, steps=a.steps)
     vid = None if a.no_video else Video(a.task, a.width, a.height)
 
     def save(k, r):
@@ -174,7 +174,7 @@ def main():
         if vid is not None and len(r.get("frames", ())):
             vid.write(r, ep / "episode.mp4")
 
-    print(f"policy {path}  task {a.task}  horizon {a.horizon:g} s  seed {a.seed}  n {a.n}", flush=True)
+    print(f"policy {path}  task {a.task}  budget {a.steps} steps  seed {a.seed}  n {a.n}", flush=True)
     summary, rows = evaluate(env, policy, a.task, n=a.n, seed=a.seed, record=True, on_episode=save)
     summary["policy"] = str(path)
     (out / "eval.json").write_text(json.dumps(dict(summary=summary, episodes=rows), indent=1))

@@ -53,7 +53,7 @@ def single(a, robot, pol, token, name):
     rows, t0 = [], time.time()
     for k in range(a.n):
         seed = RESERVED + k
-        with robot.start(a.task, seed=seed, horizon=a.horizon, token=token) as ep:
+        with robot.start(a.task, seed=seed, steps=a.steps, token=token) as ep:
             o = run_to_end(ep, pol.policy, robot)
             ep._conn.rpc(cmd="save_video", ep=ep._ep, name=f"{name}/e{k:03d}")
         rows.append(dict(trial=k, seed=seed, success=o["success"], safety=o["safety"], timeout=o["timeout"],
@@ -61,7 +61,7 @@ def single(a, robot, pol, token, name):
         if (k + 1) % 10 == 0:
             print(f"[eval] {k + 1}/{a.n}: {sum(r['success'] for r in rows)} ok ({time.time() - t0:.0f}s)", flush=True)
     ok = [r for r in rows if r["success"]]
-    return dict(task=a.task, horizon_s=a.horizon, n=len(rows), n_ok=len(ok), success_rate=round(100 * len(ok) / max(1, len(rows)), 1),
+    return dict(task=a.task, step_budget=a.steps, n=len(rows), n_ok=len(ok), success_rate=round(100 * len(ok) / max(1, len(rows)), 1),
                 time_mean_s=round(float(np.mean([r["time_s"] for r in ok])), 2) if ok else None,
                 timeouts=sum(r["timeout"] for r in rows), safety=sum(r["safety"] for r in rows),
                 errors=sum(bool(r["error"]) for r in rows)), rows
@@ -72,7 +72,7 @@ def board(a, robot, pol, token, name):
     for s in range(a.seed0, a.seed0 + a.seeds):
         seed = RESERVED + s
         rng = np.random.default_rng(seed)
-        with robot.board(seed=seed, tasks=a.tasks, per_part_s=a.horizon, token=token) as b:
+        with robot.board(seed=seed, tasks=a.tasks, steps_per_part=a.steps, token=token) as b:
             order = [str(p) for p in rng.permutation(b.parts)]
             stages, err = [], None
             for i, part in enumerate(order):
@@ -102,7 +102,7 @@ def board(a, robot, pol, token, name):
         res.append(dict(seed=seed, order=order, stages=stages, seated=o["seated"], n_seated=o["n_seated"], n=o["n"],
                         time_s=o["time_s"], timeout=o["timeout"], error=err))
         print(f"seed {seed}: {o['n_seated']}/{o['n']} seated, {o['time_s']} s{'  ' + err if err else ''}", flush=True)
-    return dict(tasks=a.tasks, per_part_s=a.horizon, n_seeds=len(res),
+    return dict(tasks=a.tasks, steps_per_part=a.steps, n_seeds=len(res),
                 seated_mean=round(float(np.mean([r["n_seated"] for r in res])), 2),
                 all_seated_rate=round(100 * float(np.mean([r["n_seated"] == r["n"] for r in res])), 1),
                 per_part={p: round(100 * float(np.mean([r["seated"][p] for r in res])), 1) for p in res[0]["seated"]}), res
@@ -113,7 +113,7 @@ def main():
     ap.add_argument("--sandbox", required=True)
     ap.add_argument("--task", default="R8"); ap.add_argument("--n", type=int, default=51)
     ap.add_argument("--board", action="store_true"); ap.add_argument("--tasks", default="board20"); ap.add_argument("--seeds", type=int, default=10); ap.add_argument("--seed0", type=int, default=0, help="first held-out board index (to split boards across processes)")
-    ap.add_argument("--horizon", type=float, default=240.0)
+    ap.add_argument("--steps", type=int, default=6000, help="budget per part in 25 Hz control steps (pooled on the board)")
     ap.add_argument("--out", required=True, help="where eval.json goes (videos: server --out/<name>/)")
     ap.add_argument("--name", default=None)
     a = ap.parse_args()

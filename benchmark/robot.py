@@ -3,13 +3,13 @@ The policy sees robot state and images only: no part pose, no mask, no CAD model
 
     import robot
     print(robot.spec())                        # the methods of `api`
-    api = robot.start("R8", seed=51)           # one part dropped loose on the board, arm at home; 240 s
+    api = robot.start("R8", seed=51)           # one part dropped loose on the board, arm at home; 6000 control steps
     print(api.instruction())                   # the task in one sentence (orange part -> blue fixture)
     views = api.camera()                    # rgb, depth, K, cam_pos, cam_R per camera
     ...                                        # api.EpisodeOver is raised when the episode ends
     print(api.outcome())                       # success / safety / timeout / steps
 
-    b = robot.board(seed=51)                   # all 20 parts on the board, 240 s per part, scored at the end
+    b = robot.board(seed=51)                   # all 20 parts on the board, 6000 steps per part pooled, scored at the end
     for part in b.parts:
         api = b.select(part)                   # the part now being scored; one continuous task: the arm goes on
         ...                                    # from where the previous part left it (start at home only once)
@@ -100,9 +100,9 @@ class Episode(Api):
 
 
 class Board:
-    def __init__(self, seed, tasks, per_part_s, token):
+    def __init__(self, seed, tasks, steps_per_part, token):
         self._conn = _Conn()
-        r = self._conn.rpc(cmd="board", seed=seed, tasks=tasks, per_part_s=per_part_s, token=token)
+        r = self._conn.rpc(cmd="board", seed=seed, tasks=tasks, steps_per_part=steps_per_part, token=token)
         self._ep, self.parts = r["ep"], list(r["parts"])
 
     def select(self, part) -> Api:
@@ -142,11 +142,11 @@ def tasks() -> list:
         c.close()
 
 
-def start(task, seed=51, horizon=240.0, token=None) -> Episode:
+def start(task, seed=51, steps=6000, token=None) -> Episode:
     c = _Conn()
-    r = c.rpc(cmd="start", task=task, seed=int(seed), horizon=float(horizon), token=token or os.environ.get("ROBOT_TOKEN"))
+    r = c.rpc(cmd="start", task=task, seed=int(seed), steps=int(steps), token=token or os.environ.get("ROBOT_TOKEN"))
     return Episode(c, r["ep"])
 
 
-def board(seed=51, tasks="board20", per_part_s=240.0, token=None) -> Board:
-    return Board(int(seed), tasks, float(per_part_s), token or os.environ.get("ROBOT_TOKEN"))
+def board(seed=51, tasks="board20", steps_per_part=6000, token=None) -> Board:
+    return Board(int(seed), tasks, int(steps_per_part), token or os.environ.get("ROBOT_TOKEN"))
