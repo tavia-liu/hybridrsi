@@ -33,7 +33,7 @@ import api  # noqa: E402
 from assembly_policy.sim.env import HISTORY, PROPRIO_DIM, EnvConfig, parse_scales  # noqa: E402
 from assembly_policy.sim.tasks import task_name  # noqa: E402
 from nets import RandomShift, ResNetActorCritic  # noqa: E402
-from pixel_env import RES, VecEnv  # noqa: E402
+from pixel_env import CAMERA_NAMES, RES, VecEnv  # noqa: E402
 from sampler import ResetSampler  # noqa: E402
 
 OBS = ("prop", "img")
@@ -132,9 +132,22 @@ class Trainer:
         self.aug = RandomShift(a.aug_pad).to(self.dev) if a.aug_pad > 0 else None
         self.ecfg = EnvConfig(nthread=a.nthread, cost_coef=a.cost_coef, action_scale_joints=parse_scales(a.action_scale_joints))
         self.args = dict(vars(a), env={k: v for k, v in dataclasses.asdict(self.ecfg).items() if k != "nthread"})
-        (self.run / "config.json").write_text(json.dumps(self.args, indent=1))
         n = sum(p.numel() for p in self.model.parameters())
         nb = sum(p.numel() for p in self.model.encoder.trunk.parameters())
+        # bookkeeping of the training units (one transition = one env x one 25 Hz control step)
+        self.args["derived"] = dict(
+            rollout_transitions=a.envs * a.steps, minibatch_size=a.envs * a.steps // a.minibatches,
+            updates_per_iteration=a.epochs * a.minibatches, total_transitions_planned=a.iters * a.envs * a.steps,
+            episode_max_steps=int(round(self.ecfg.horizon_s / self.ecfg.control_dt)), control_hz=int(round(1 / self.ecfg.control_dt)),
+            proprio_dim=HISTORY * PROPRIO_DIM, proprio_history=HISTORY, action_dim=8, action_space="joint position delta + gripper")
+        self.args["encoder"] = dict(
+            image_res=a.image, cameras=list(CAMERA_NAMES), cameras_share_weights=True,
+            encoder="torchvision resnet18 conv1..layer3, ImageNet init, BatchNorm frozen",
+            encoder_trainable="none (frozen)" if a.freeze_backbone else f"conv weights at lr x{a.backbone_lr_mult}",
+            pooling="spatial softmax (256 keypoints) + channel mean", latent_dim=128, shared_actor_critic_encoder=True,
+            heads="Linear 256 -> 2 residual blocks (256/1024) -> LN -> Linear", params_total=n, params_backbone=nb,
+            aug=f"random shift pad {a.aug_pad}, applied once per collected frame" if a.aug_pad > 0 else "none")
+        (self.run / "config.json").write_text(json.dumps(self.args, indent=1))
         print(f"[ppo] task {a.task} ({task_name(a.task)}), {a.family} bank of {len(self.bank)} starts (seed {a.bank_seed}), "
               f"{a.envs} envs, {a.image}x{a.image} x 2 cameras, {n / 1e6:.2f}M parameters, backbone {nb / 1e6:.2f}M "
               f"({'frozen' if a.freeze_backbone else f'lr x{a.backbone_lr_mult}'}), aug pad {a.aug_pad}", flush=True)
