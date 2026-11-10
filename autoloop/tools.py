@@ -137,7 +137,7 @@ class Vis:
                     [(235, 235, 235, 255), (255, 200, 120, 255)])
         Image.fromarray(img).save(out / "final.png")
 
-    def video(self, res, out: Path, fps=25, every=2):
+    def video(self, res, out: Path, fps=24, every=4):
         import imageio.v2 as imageio
         frames = [self.frame(s) for s in res["frames"][::every]]
         imageio.mimwrite(out, frames + [frames[-1]] * (fps // every), fps=fps // every, codec="libx264", quality=7, macro_block_size=8)
