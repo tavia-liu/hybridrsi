@@ -35,7 +35,7 @@ buffer_dir: null        # replay episodes on disk; put it on the node's local di
 run_dir: runs/drqv2/${task}_${family}_s${seed}
 log_every_updates: 200
 wandb:
-  project: assemble
+  project: assembly
   mode: online
   id: null
 
