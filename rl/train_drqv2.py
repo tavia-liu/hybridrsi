@@ -50,8 +50,10 @@ def make_agent(obs_spec, state_spec, action_spec, cfg, proprio):
     cfg.obs_shape = obs_spec.shape
     cfg.action_shape = action_spec.shape
     if proprio:
-        cfg._target_ = "drqv2_proprio.DrQV2ProprioAgent"
-        cfg.state_shape = state_spec.shape
+        from omegaconf import open_dict
+        with open_dict(cfg):                      # the yaml is in struct mode; these two keys exist only for the proprio agent
+            cfg._target_ = "drqv2_proprio.DrQV2ProprioAgent"
+            cfg.state_shape = state_spec.shape
     return hydra.utils.instantiate(cfg)
 
 
