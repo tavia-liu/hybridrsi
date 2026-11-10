@@ -151,7 +151,9 @@ def parse_entries(reply: str) -> dict:
 
 
 def outcome(r) -> str:
-    return "ERROR" if r.get("error") else "SUCCESS" if r["success"] else "SAFETY" if r.get("safety") else "TIMEOUT"
+    if r.get("error") or r["success"] or r.get("safety"):
+        return "ERROR" if r.get("error") else "SUCCESS" if r["success"] else "SAFETY"
+    return "TIMEOUT" if r.get("timeout", True) else "ENDED"      # ENDED: the policy returned before the budget ran out
 
 
 def best_round(run: Path):

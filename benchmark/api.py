@@ -315,12 +315,9 @@ def run_episode(env, state, policy, seed=0, record=False):
         pass
     except Exception as e:                       # a buggy policy is a result, not a crash
         err = f"{type(e).__name__}: {e}"
-    if not api.done:                             # policy returned early; let the clock run out
-        try:
-            while True:
-                api.wait(0.2)
-        except EpisodeOver:
-            pass
+    if not api.done:                             # the policy returned (or raised): the episode ends here
+        api.done = True
+        api.outcome = dict(success=False, safety=False, timeout=False, steps=int(env.t[0]))
     out = dict(**api.outcome, error=err, trace=api.trace)
     if api.frames is not None:
         out["frames"] = np.asarray(api.frames)

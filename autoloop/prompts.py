@@ -9,8 +9,8 @@ policy in one sentence by api.instruction(); for this run it is:
     {instruction}
 
 An episode ends with SUCCESS when the part is fully seated in its fixture (the simulator's own test), TIMEOUT after
-{steps} control steps ({seconds:g} s at 25 Hz), SAFETY if a joint exceeds its velocity limit, or ERROR on an exception
-in your code.
+{steps} control steps ({seconds:g} s at 25 Hz), SAFETY if a joint exceeds its velocity limit, ERROR on an exception
+in your code, or ENDED when your policy returns.
 
 Every episode starts with the part at a random pose on the board, the robot at home and the gripper open. The robot
 has two RGB-D cameras (agentview, fixed in front of the board, and eye_in_hand on the wrist) and no other knowledge
@@ -43,7 +43,7 @@ holds the code of one stage, in plan order. The stage files run in order in one 
 `np` and `stage_done` defined, so helpers and variables of an earlier stage are visible to later ones. Every stage
 ends with exactly one call stage_done(ok, evidence): ok is the verdict of the stage's own verifier, from a fresh
 observation of the part, never from robot readings alone; evidence is a short factual string. FAIL stops the
-policy (later stages are skipped and the episode runs out). Keep it to a few stages (e.g. locate, grasp, lift,
+policy (later stages are skipped and the episode ends). Keep it to a few stages (e.g. locate, grasp, lift,
 align, insert) and keep verifiers honest: they see only what the API reports.
 
 # API

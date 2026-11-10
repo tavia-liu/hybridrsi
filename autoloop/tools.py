@@ -63,7 +63,8 @@ def run_one(env, task, start, policy, seed):
 
 
 def outcome_line(r):
-    why = "ERROR" if r.get("error") else "SUCCESS" if r.get("success") else "SAFETY" if r.get("safety") else "TIMEOUT"
+    why = ("ERROR" if r.get("error") else "SUCCESS" if r.get("success") else "SAFETY" if r.get("safety")
+           else "TIMEOUT" if r.get("timeout", True) else "ENDED")
     steps = r.get("steps", 0)
     return f"{why}  steps={steps} ({steps * DT:.1f}s)" + (f"  error={r['error']}" if r.get("error") else "")
 
