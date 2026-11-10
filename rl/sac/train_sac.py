@@ -55,6 +55,9 @@ def parse(argv=None):
     ap.add_argument("--total-transitions", type=int, default=20_000_000)
     # SAC
     ap.add_argument("--utd", type=float, default=0.5, help="gradient steps per collected transition")
+    ap.add_argument("--training-freq", type=int, default=None,
+                    help="ManiSkill sac_rgbd cadence: every env walks training_freq // envs steps, then training_freq * utd "
+                         "gradient steps (their default 64 with 16 envs = 4 steps, 16 updates); default: 1 step, envs * utd updates")
     ap.add_argument("--batch", type=int, default=256)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--gamma", type=float, default=0.99)
@@ -135,8 +138,11 @@ class Trainer:
         self.it, self.transitions, self.updates = 0, 0, 0
         self.ecfg = EnvConfig(nthread=a.nthread, cost_coef=a.cost_coef, horizon_s=a.episode_steps * 0.04,
                               action_scale_joints=parse_scales(a.action_scale_joints))
+        self.steps_per_iter = max(1, a.training_freq // a.envs) if a.training_freq else 1
+        self.updates_per_iter = int(a.envs * self.steps_per_iter * a.utd)
         self.args = dict(vars(a), env={k: v for k, v in dataclasses.asdict(self.ecfg).items() if k != "nthread"},
-                         derived=dict(transitions_per_iteration=a.envs, updates_per_iteration=int(a.envs * a.utd),
+                         derived=dict(steps_per_iteration=self.steps_per_iter, transitions_per_iteration=a.envs * self.steps_per_iter,
+                                      updates_per_iteration=self.updates_per_iter,
                                       episode_max_steps=a.episode_steps, action_dim=self.act_dim, feat_dim=FEAT_DIM,
                                       target_entropy=self.target_entropy, backup_entropy=a.backup_entropy, backbone="frozen"))
         (self.run / "config.json").write_text(json.dumps(self.args, indent=1))
@@ -144,7 +150,8 @@ class Trainer:
         print(f"[sac] task {a.task} ({task_name(a.task)}), {a.family} bank of {len(self.bank)} starts, {a.envs} envs, "
               f"{a.action_space} actions ({self.act_dim}-D), episodes <= {a.episode_steps} steps, {a.image}x{a.image} x 2 cameras "
               f"-> frozen ResNet-18 -> {FEAT_DIM}-d features in the buffer ({a.buffer_size}), {n / 1e6:.2f}M trainable "
-              f"parameters, {a.n_critics} critics (min over {a.n_min_q}), utd {a.utd}, aug pad {a.aug_pad}", flush=True)
+              f"parameters, {a.n_critics} critics (min over {a.n_min_q}), utd {a.utd} ({self.steps_per_iter} step(s) of every env, "
+              f"then {self.updates_per_iter} updates), aug pad {a.aug_pad}", flush=True)
         self.wb = None
         if os.environ.get("WANDB_PROJECT"):
             import wandb
@@ -229,8 +236,9 @@ class Trainer:
         feat, prop = self._featurize(self.env.observe())
         st = dict(done=0, success=0, safety=0, ep_len=[], sim=0.0, losses=[])
         trans_log = self.transitions
-        n_up = int(N * a.utd)
+        n_up = self.updates_per_iter
         while self.transitions < a.total_transitions:
+          for _step in range(self.steps_per_iter):
             with torch.no_grad():
                 self.model.norm.update(prop)
                 if self.transitions < a.learning_starts:
@@ -250,10 +258,12 @@ class Trainer:
             term = torch.as_tensor(done & ~info["timeout"], dtype=torch.float32, device=self.dev)
             self.buffer.add(feat, prop, act, torch.as_tensor(r, dtype=torch.float32, device=self.dev), term, nf, npr)
             feat, prop = nfeat, nprop
-            self.transitions += N; self.it += 1
+            self.transitions += N
             if len(ids):
                 st["done"] += len(ids); st["success"] += int(info["success"][ids].sum()); st["safety"] += int(info["safety"][ids].sum())
                 st["ep_len"] += info["ep_len"][ids].tolist()
+          self.it += 1
+          if True:
             if self.transitions >= a.learning_starts and len(self.buffer) >= a.batch:
                 self.model.train()
                 for _ in range(n_up):
