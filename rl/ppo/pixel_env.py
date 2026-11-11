@@ -30,6 +30,8 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "benchmark")]
+os.environ.setdefault("CAP_CAM_RES", "1024x1024")      # offscreen buffer large enough for renders up to 1024 px (must precede perception)
+os.environ.setdefault("CAP_CAM_RES", "1024x1024")      # offscreen buffer large enough for up to 1024 px renders (must precede perception)
 
 from assembly_policy.sim.env import STATE_SPEC, BatchedAssemblyEnv, EnvConfig  # noqa: E402
 from assembly_policy.sim.scene import build_xml  # noqa: E402

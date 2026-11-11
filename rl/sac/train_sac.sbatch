@@ -10,6 +10,7 @@
 # SAC on frozen ResNet-18 features (rl/sac/train_sac.py). Submit from the repository root:
 #   mkdir -p runs/slurm; sbatch --export=ALL,TASK=P4,SEED=0 rl/sac/train_sac.sbatch      (ARGS="--flag value ..." for overrides)
 # Resumes from $RUN_DIR/checkpoint.pt (model + optimisers; the replay buffer restarts empty): RUN_DIR=<existing run dir>.
+# GPU type: sbatch --gres=gpu:a100:1 ... (default a40 below); the ResNet trunk at 512 px is ~2x faster on an A100.
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONPATH=.:benchmark:rl/ppo:rl/sac MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
