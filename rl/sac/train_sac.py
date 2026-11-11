@@ -36,7 +36,7 @@ import api  # noqa: E402
 from assembly_policy.sim.env import HISTORY, PROPRIO_DIM, EnvConfig, parse_scales  # noqa: E402
 from assembly_policy.sim.tasks import task_name  # noqa: E402
 from nets import RandomShift, ResNetEncoder  # noqa: E402  (rl/ppo/nets.py)
-from pixel_env import RES, VecEnv  # noqa: E402
+from pixel_env import RES, PixelEnv, VecEnv  # noqa: E402
 from sac_nets import FEAT_DIM, SACModel, pool_features  # noqa: E402
 from train_resnet import load_bank  # noqa: E402
 
@@ -94,6 +94,8 @@ def parse(argv=None):
     ap.add_argument("--log-every", type=int, default=20, help="iterations (one iteration = one step of every env)")
     ap.add_argument("--save-every", type=int, default=500, help="iterations")
     ap.add_argument("--max-hours", type=float, default=1e9)
+    ap.add_argument("--eval-every", type=int, default=50_000, help="transitions between deterministic evals (0 = off)")
+    ap.add_argument("--eval-starts", type=int, default=32, help="fixed bank starts used for every eval")
     return ap.parse_args(argv)
 
 
@@ -186,6 +188,12 @@ class Trainer:
         t0 = np.random.default_rng(a.seed + 7).integers(0, a.episode_steps, a.envs)   # desynchronised episode clocks
         self.env = VecEnv(a.task, a.envs, self.ecfg, self._provider, t0, res=a.image, action_space=a.action_space,
                           ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad)
+        self.eval_env = None
+        if a.eval_every > 0:                                   # its own envs: evaluation never touches the training episodes
+            self.eval_env = PixelEnv(a.task, a.eval_starts, self.ecfg, res=a.image, action_space=a.action_space,
+                                     ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad, render_workers=4)
+            self.eval_S = self.bank[-a.eval_starts:]           # the last bank entries, fixed for the whole run
+        self.next_eval = (self.transitions // a.eval_every + 1) * a.eval_every if a.eval_every > 0 else None
 
     # ------------------------------------------------------------- helpers
     def _provider(self, k, finished=None, outcomes=None):
@@ -207,6 +215,24 @@ class Trainer:
             feat = pool_features(self.trunk.features(img)).to(torch.float16)
         prop = torch.as_tensor(sel(o["proprio"]), dtype=torch.float32, device=self.dev)
         return feat, prop
+
+    @torch.no_grad()
+    def evaluate(self):
+        """Deterministic policy on the fixed eval starts, no updates. Returns success rate, safety rate, mean length."""
+        env, N = self.eval_env, self.a.eval_starts
+        env.set_states(np.arange(N), self.eval_S)
+        done = np.zeros(N, bool); succ = np.zeros(N, bool); saf = np.zeros(N, bool); length = np.full(N, self.a.episode_steps)
+        self.model.eval()
+        for t in range(self.a.episode_steps):
+            feat, prop = self._featurize(env.observe())
+            act = self.model.act(feat, prop, deterministic=True).cpu().numpy()
+            act[done] = 0; act[done, -1] = -1
+            r, dn, info = env.step(act)
+            new = dn & ~done
+            succ |= info["success"] & new; saf |= info["safety"] & new; length[new] = t + 1; done |= dn
+            if done.all():
+                break
+        return dict(eval_success=float(succ.mean()), eval_safety=float(saf.mean()), eval_len=float(length.mean()))
 
     def save(self):
         d = dict(model=self.model.state_dict(), q_opt=self.q_opt.state_dict(), pi_opt=self.pi_opt.state_dict(),
@@ -293,6 +319,13 @@ class Trainer:
                 for _ in range(n_up):
                     st["losses"].append(self.update())
                 self.model.eval()
+            ev = {}
+            if self.eval_env is not None and self.transitions >= self.next_eval:
+                ev = self.evaluate(); self.next_eval += a.eval_every
+                print(f"[eval] T={self.transitions / 1e6:.2f}M success {ev['eval_success']:.3f} safety {ev['eval_safety']:.3f} len {ev['eval_len']:.0f}", flush=True)
+                if self.wb is not None:
+                    self.wb.log(dict(transitions=self.transitions, **ev), step=self.it)
+                log_f.write(json.dumps(dict(it=self.it, transitions=self.transitions, **ev)) + "\n"); log_f.flush()
             if self.it % a.log_every == 0:
                 n_ep = max(st["done"], 1); L = st["losses"]
                 rec = dict(it=self.it, transitions=self.transitions, updates=self.updates,
