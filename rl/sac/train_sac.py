@@ -96,6 +96,7 @@ def parse(argv=None):
     ap.add_argument("--max-hours", type=float, default=1e9)
     ap.add_argument("--eval-every", type=int, default=50_000, help="transitions between deterministic evals (0 = off)")
     ap.add_argument("--eval-starts", type=int, default=32, help="fixed bank starts used for every eval")
+    ap.add_argument("--eval-video-envs", type=int, default=4, help="eval envs recorded to <run>/eval_videos/ (0 = none)")
     return ap.parse_args(argv)
 
 
@@ -219,12 +220,20 @@ class Trainer:
     @torch.no_grad()
     def evaluate(self):
         """Deterministic policy on the fixed eval starts, no updates. Returns success rate, safety rate, mean length."""
-        env, N = self.eval_env, self.a.eval_starts
+        env, N, V = self.eval_env, self.a.eval_starts, min(self.a.eval_video_envs, self.a.eval_starts)
         env.set_states(np.arange(N), self.eval_S)
         done = np.zeros(N, bool); succ = np.zeros(N, bool); saf = np.zeros(N, bool); length = np.full(N, self.a.episode_steps)
+        frames = []
         self.model.eval()
         for t in range(self.a.episode_steps):
-            feat, prop = self._featurize(env.observe())
+            o = env.observe()
+            if V and t % 2 == 0:                                   # 12 fps video of the first V eval envs, both cameras
+                img = o["img"]; cells = [np.concatenate([img[i, 0], img[i, 1]], 1) for i in range(V)]
+                cols = 2 if V > 1 else 1
+                rows = [np.concatenate(cells[r * cols:(r + 1) * cols], 1) for r in range((V + cols - 1) // cols)]
+                w = max(r.shape[1] for r in rows); rows = [np.pad(r, ((0, 0), (0, w - r.shape[1]), (0, 0))) for r in rows]
+                frames.append(np.concatenate(rows, 0))
+            feat, prop = self._featurize(o)
             act = self.model.act(feat, prop, deterministic=True).cpu().numpy()
             act[done] = 0; act[done, -1] = -1
             r, dn, info = env.step(act)
@@ -232,6 +241,11 @@ class Trainer:
             succ |= info["success"] & new; saf |= info["safety"] & new; length[new] = t + 1; done |= dn
             if done.all():
                 break
+        if frames:
+            import imageio
+            vd = self.run / "eval_videos"; vd.mkdir(exist_ok=True)
+            tag = "".join("S" if succ[i] else ("F" if saf[i] else "T") for i in range(V))
+            imageio.mimwrite(vd / f"T{self.transitions:09d}_{tag}.mp4", frames, fps=12, codec="libx264", quality=7)
         return dict(eval_success=float(succ.mean()), eval_safety=float(saf.mean()), eval_len=float(length.mean()))
 
     def save(self):
