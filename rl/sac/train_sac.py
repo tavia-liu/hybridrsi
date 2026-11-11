@@ -60,6 +60,8 @@ def parse(argv=None):
                          "gradient steps (their default 64 with 16 envs = 4 steps, 16 updates); default: 1 step, envs * utd updates")
     ap.add_argument("--batch", type=int, default=256)
     ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--optimizer", default="adam", choices=["adam", "sgd"], help="ManiSkill: adam (three Adam optimisers)")
+    ap.add_argument("--momentum", type=float, default=0.9, help="SGD momentum (only with --optimizer sgd)")
     ap.add_argument("--gamma", type=float, default=0.99)
     ap.add_argument("--tau", type=float, default=0.005)
     ap.add_argument("--learning-starts", type=int, default=5000, help="random actions until this many transitions")
@@ -139,9 +141,11 @@ class Trainer:
         hidden = tuple(int(x) for x in a.hidden.split(","))
         self.model = SACModel(PROP, self.act_dim, a.z_dim, a.n_critics, not a.no_layer_norm, a.init_alpha, encoder=a.encoder,
                               image=a.image, hidden=hidden, prop_norm=not a.no_prop_norm, last_act=self.plain).to(self.dev)
-        self.q_opt = torch.optim.Adam(list(self.model.encoder.parameters()) + list(self.model.critic.parameters()), lr=a.lr)
-        self.pi_opt = torch.optim.Adam(self.model.actor.parameters(), lr=a.lr)
-        self.alpha_opt = torch.optim.Adam([self.model.log_alpha], lr=a.lr)
+        opt = (lambda params: torch.optim.Adam(params, lr=a.lr)) if a.optimizer == "adam" else \
+              (lambda params: torch.optim.SGD(params, lr=a.lr, momentum=a.momentum))
+        self.q_opt = opt(list(self.model.encoder.parameters()) + list(self.model.critic.parameters()))
+        self.pi_opt = opt(self.model.actor.parameters())
+        self.alpha_opt = opt([self.model.log_alpha])
         self.target_entropy = -float(self.act_dim) if a.target_entropy is None else a.target_entropy
         self.it, self.transitions, self.updates = 0, 0, 0
         self.ecfg = EnvConfig(nthread=a.nthread, cost_coef=a.cost_coef, horizon_s=a.episode_steps * 0.04,
