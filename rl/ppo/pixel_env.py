@@ -12,6 +12,8 @@ Action space (action_space=):
           with one damped-least-squares step on the TCP Jacobian (the robot's own kinematics), clipped to the joint
           action scale, and handed to the joint PD. Default.
   "joint" 8 numbers: the simulator's native 7 relative joint-position increments + gripper (AlphaNIST).
+release_fails=True (training only): an "open" gripper command before success ends the episode as a failure (terminal,
+reward unchanged), so dropping the part into the hole cannot be learned as the way to succeed.
 
 VecEnv = auto-resetting PixelEnv with a learner-side reset provider (assembly-nist rl/vecenv.LocalVecEnv).
 """
@@ -136,9 +138,10 @@ class RenderPool:
 
 class PixelEnv(BatchedAssemblyEnv):
     def __init__(self, task_name, n_envs, ecfg: EnvConfig | None = None, res=RES, action_space="ee",
-                 ee_step_m=0.0025, ee_step_rad=0.0436, ik_damping=1e-3, render_workers=RENDER_WORKERS):
+                 ee_step_m=0.0025, ee_step_rad=0.0436, ik_damping=1e-3, render_workers=RENDER_WORKERS, release_fails=False):
         super().__init__([task_name], np.zeros(n_envs, dtype=np.int64), ecfg)
         assert action_space in ("ee", "joint"), action_space
+        self.release_fails = bool(release_fails)      # training rule: commanding the gripper open before success ends the episode
         self.action_space, self.ee_step_m, self.ee_step_rad, self.ik_damping = action_space, float(ee_step_m), float(ee_step_rad), float(ik_damping)
         self.action_dim = 7 if action_space == "ee" else 8
         self.res = res
@@ -198,9 +201,16 @@ class PixelEnv(BatchedAssemblyEnv):
     def step(self, action):
         if self.action_space == "ee":
             action = self.ee_to_joint(action)
-        out = super().step(action)
+        reward, done, info = super().step(action)
+        if self.release_fails:                        # letting go of the part = failure (terminal, no reward), like a safety stop
+            released = (self.grip_cmd > 0.0) & ~info["success"]
+            info["released"] = released
+            info["timeout"] = info["timeout"] & ~released
+            done = done | released
+        else:
+            info["released"] = np.zeros(self.N, bool)
         self._refresh(np.arange(self.N))
-        return out
+        return reward, done, info
 
     def observe(self):
         o = super().observe()

@@ -81,6 +81,7 @@ def parse(argv=None):
     ap.add_argument("--action-scale-joints", default="0.05+0.05+0.05+0.06+0.07+0.1+0.17")
     ap.add_argument("--cost-coef", type=float, default=2e-5)
     ap.add_argument("--nthread", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", 8)))
+    ap.add_argument("--release-fails", action="store_true", help="opening the gripper before success ends the episode (training rule)")
     ap.add_argument("--image", type=int, default=RES)
     ap.add_argument("--aug-pad", type=int, default=4, help="random shift before the encoder (0 = none)")
     ap.add_argument("--encoder", default="resnet", choices=["resnet", "plainconv"],
@@ -188,11 +189,11 @@ class Trainer:
             self.buffer = ReplayBuffer(a.buffer_size, self.act_dim, self.dev)
         t0 = np.random.default_rng(a.seed + 7).integers(0, a.episode_steps, a.envs)   # desynchronised episode clocks
         self.env = VecEnv(a.task, a.envs, self.ecfg, self._provider, t0, res=a.image, action_space=a.action_space,
-                          ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad)
+                          ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad, release_fails=a.release_fails)
         self.eval_env = None
         if a.eval_every > 0:                                   # its own envs: evaluation never touches the training episodes
             self.eval_env = PixelEnv(a.task, a.eval_starts, self.ecfg, res=a.image, action_space=a.action_space,
-                                     ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad, render_workers=4)
+                                     ee_step_m=a.ee_step_m, ee_step_rad=a.ee_step_rad, render_workers=4, release_fails=a.release_fails)
             self.eval_S = self.bank[-a.eval_starts:]           # the last bank entries, fixed for the whole run
         self.next_eval = (self.transitions // a.eval_every + 1) * a.eval_every if a.eval_every > 0 else None
 
@@ -238,7 +239,7 @@ class Trainer:
             act[done] = 0; act[done, -1] = -1
             r, dn, info = env.step(act)
             new = dn & ~done
-            succ |= info["success"] & new; saf |= info["safety"] & new; length[new] = t + 1; done |= dn
+            succ |= info["success"] & new; saf |= (info["safety"] | info["released"]) & new; length[new] = t + 1; done |= dn
             if done.all():
                 break
         if frames:
@@ -297,7 +298,7 @@ class Trainer:
         log_f = open(self.run / "log.jsonl", "a")
         t_start = t_log = time.time()
         feat, prop = self._featurize(self.env.observe())
-        st = dict(done=0, success=0, safety=0, ep_len=[], sim=0.0, losses=[])
+        st = dict(done=0, success=0, safety=0, released=0, ep_len=[], sim=0.0, losses=[])
         trans_log = self.transitions
         n_up = self.updates_per_iter
         while self.transitions < a.total_transitions:
@@ -325,7 +326,7 @@ class Trainer:
             self.transitions += N
             if len(ids):
                 st["done"] += len(ids); st["success"] += int(info["success"][ids].sum()); st["safety"] += int(info["safety"][ids].sum())
-                st["ep_len"] += info["ep_len"][ids].tolist()
+                st["released"] += int(info["released"][ids].sum()); st["ep_len"] += info["ep_len"][ids].tolist()
           self.it += 1
           if True:
             if self.transitions >= a.learning_starts and len(self.buffer) >= a.batch:
@@ -344,17 +345,17 @@ class Trainer:
                 n_ep = max(st["done"], 1); L = st["losses"]
                 rec = dict(it=self.it, transitions=self.transitions, updates=self.updates,
                            fps=(self.transitions - trans_log) / (time.time() - t_log), t_sim=st["sim"],
-                           episodes=st["done"], success=st["success"] / n_ep, safety=st["safety"] / n_ep,
+                           episodes=st["done"], success=st["success"] / n_ep, safety=st["safety"] / n_ep, released=st["released"] / n_ep,
                            ep_len=float(np.mean(st["ep_len"])) if st["ep_len"] else 0.0, buffer=len(self.buffer),
                            **{k: float(np.mean([x[k] for x in L])) for k in (L[0].keys() if L else [])})
                 log_f.write(json.dumps(rec) + "\n"); log_f.flush()
                 if self.wb is not None:
                     self.wb.log(rec, step=self.it)
                 print(f"it {self.it} T={self.transitions / 1e6:.2f}M fps={rec['fps']:.0f} success={rec['success']:.3f} "
-                      f"safety={rec['safety']:.3f} len={rec['ep_len']:.0f} eps={st['done']} "
+                      f"safety={rec['safety']:.3f} released={rec['released']:.3f} len={rec['ep_len']:.0f} eps={st['done']} "
                       + (f"qf={rec['qf']:.4f} q={rec['q']:.3f} alpha={rec['alpha']:.3f} H={rec['entropy']:.2f} " if L else "")
                       + f"sim={st['sim']:.1f}s", flush=True)
-                st = dict(done=0, success=0, safety=0, ep_len=[], sim=0.0, losses=[]); t_log = time.time(); trans_log = self.transitions
+                st = dict(done=0, success=0, safety=0, released=0, ep_len=[], sim=0.0, losses=[]); t_log = time.time(); trans_log = self.transitions
             if self.it % a.save_every == 0:
                 self.save()
             if (time.time() - t_start) / 3600 > a.max_hours:
